@@ -11,7 +11,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -23,7 +22,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -67,7 +65,6 @@ fun WordDetailScreen(
             word = word,
             inMine = state.inMine,
             onToggleMine = viewModel::toggleMine,
-            onSpeak = viewModel::speak,
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize(),
@@ -80,7 +77,6 @@ private fun WordDetailContent(
     word: Word,
     inMine: Boolean,
     onToggleMine: () -> Unit,
-    onSpeak: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -89,20 +85,10 @@ private fun WordDetailContent(
             .padding(horizontal = 20.dp),
     ) {
         Spacer(modifier = Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = word.word,
-                style = MaterialTheme.typography.displayMedium,
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(onClick = onSpeak) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = stringResource(R.string.detail_speak),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
+        Text(
+            text = word.word,
+            style = MaterialTheme.typography.displayMedium,
+        )
         if (word.usphone.isNotBlank() || word.ukphone.isNotBlank()) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(

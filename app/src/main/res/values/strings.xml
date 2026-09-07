@@ -25,7 +25,6 @@
     <string name="detail_not_found">词条不存在</string>
     <string name="detail_custom_tag">自定义词（扫词/手动添加）</string>
     <string name="detail_back">返回</string>
-    <string name="detail_speak">发音</string>
     <string name="detail_in_mine">已加入我要背</string>
     <string name="detail_not_in_mine">加入我要背</string>
 
@@ -59,7 +58,6 @@
     <string name="study_session_done">本组完成！</string>
     <string name="study_continue">继续</string>
     <string name="study_quit">结束学习</string>
-    <string name="study_speak">发音</string>
     <string name="study_no_meaning">暂无释义（自定义词）</string>
 
     <!-- 扫词添加 -->

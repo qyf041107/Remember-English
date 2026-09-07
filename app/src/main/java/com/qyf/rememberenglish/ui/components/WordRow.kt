@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,13 +25,12 @@ import androidx.compose.ui.unit.dp
 import com.qyf.rememberenglish.R
 import com.qyf.rememberenglish.domain.model.Word
 
-/** 词库/列表通用行：单词 + 音标 + 首条释义 + 发音 + 加词按钮（简约，无多余装饰） */
+/** 词库/列表通用行：单词 + 音标 + 首条释义 + 加词按钮（简约，无多余装饰） */
 @Composable
 fun WordRow(
     word: Word,
     inMine: Boolean,
     onClick: () -> Unit,
-    onSpeak: () -> Unit,
     onAdd: () -> Unit,
     modifier: Modifier = Modifier,
     trailing: @Composable (() -> Unit)? = null,
@@ -72,14 +70,6 @@ fun WordRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
-        IconButton(onClick = onSpeak) {
-            Icon(
-                imageVector = Icons.Filled.PlayArrow,
-                contentDescription = stringResource(R.string.detail_speak),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
         }
         if (trailing == null) {
             IconButton(onClick = onAdd, enabled = !inMine) {

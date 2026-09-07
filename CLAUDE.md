@@ -63,7 +63,7 @@
 - 点击 deep link 直达学习页；Android 13+ `POST_NOTIFICATIONS` 运行时申请，拒绝后引导跳系统设置
 
 ### OCR 扫词（"实时显示单词意思"）
-- 主交互：CameraX `ImageAnalysis`(STRATEGY_KEEP_ONLY_LATEST) + ML Kit 流式识别，节流 ~500ms + 结果去抖，候选词 chip 列表实时显示释义，勾选批量加入"我要背"
+- 主交互：CameraX `ImageAnalysis`(STRATEGY_KEEP_ONLY_LATEST) + ML Kit 流式识别，节流 ~500ms + 结果去抖，候选词 chip 列表实时显示释义，勾选批量加入"我要背"。候选词排序（用户 2026-09-07 要求按考频优先）：命中考研词库的排前面，未命中的自定义词排后面，组内保持画面出现顺序
 - 提取（`domain/ocr/WordExtractor.kt` 纯 Kotlin）：正则 `[A-Za-z][A-Za-z'-]+` → 小写 → 滤单字符/含数字/含空格 → 保序去重
 - 命中词库显示释义；未命中 → 自定义词（source=1）。拍照/相册/手动输入走同一解析管线
 
@@ -72,7 +72,7 @@
 - [ ] M0 环境搭建：SDK（platform-35 / build-tools 35.0.0 / platform-tools）装齐，gradle wrapper 可用
 - [ ] M0 CLAUDE.md + README.md（含词库来源与 GPL-3.0 声明）
 - [ ] M1 骨架：`gradlew :app:assembleDebug` 通过，4 tab（今日/词库/我要背/我的）空应用
-- [ ] M1 词库：assets 词库 JSON（≈6705 词）；Room 预填充；词库搜索/词详情(TTS 发音)/我要背列表
+- [ ] M1 词库：assets 词库 JSON（≈6705 词）；Room 预填充；词库搜索/词详情/我要背列表（用户 2026-09-07 决定：不做 TTS 发音，相关按钮已移除）
 - [ ] M2 学习：SRS/选词单测全绿；真机完成一次 20 词学习会话；进度条正确
 - [ ] M3 通知：真机提醒时间设 1 分钟后收到 heads-up；完成后当天不再收到
 - [ ] M4 OCR：WordExtractorTest 全绿；真机对书本实时识别出词并加入"我要背"

@@ -96,7 +96,6 @@ fun MyWordsScreen(
                             word = word,
                             inMine = true,
                             onClick = { onWordClick(word.id) },
-                            onSpeak = { viewModel.speak(word.word) },
                             onAdd = {},
                             trailing = {
                                 DueLabel(dueAt = userWord.dueAt)

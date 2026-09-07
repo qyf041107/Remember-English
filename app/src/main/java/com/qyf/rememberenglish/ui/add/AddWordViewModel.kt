@@ -49,9 +49,10 @@ class AddWordViewModel @Inject constructor(
         val tokens = WordExtractor.extract(rawText)
         if (tokens.isEmpty()) return
         viewModelScope.launch {
+            // 考研词库命中的排前面（Kotlin 排序稳定，组内保持画面出现顺序），未命中的自定义词排后面
             val candidates = tokens.map { token ->
                 CandidateWord(text = token, matched = wordRepository.findByWord(token))
-            }
+            }.sortedByDescending { it.matched != null }
             _ui.update { it.copy(candidates = candidates) }
         }
     }

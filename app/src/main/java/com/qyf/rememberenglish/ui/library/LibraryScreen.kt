@@ -54,7 +54,6 @@ fun LibraryScreen(
                         word = word,
                         inMine = word.id in state.inMineIds,
                         onClick = { onWordClick(word.id) },
-                        onSpeak = { viewModel.speak(word.word) },
                         onAdd = { viewModel.addToMine(word.id) },
                     )
                 }

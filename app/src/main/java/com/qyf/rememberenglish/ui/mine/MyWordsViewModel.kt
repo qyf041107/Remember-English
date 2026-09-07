@@ -3,7 +3,6 @@ package com.qyf.rememberenglish.ui.mine
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qyf.rememberenglish.data.repository.WordRepository
-import com.qyf.rememberenglish.data.speech.TtsPlayer
 import com.qyf.rememberenglish.domain.model.LearningState
 import com.qyf.rememberenglish.domain.model.UserWord
 import com.qyf.rememberenglish.domain.model.Word
@@ -30,7 +29,6 @@ data class MyWordsUiState(
 @HiltViewModel
 class MyWordsViewModel @Inject constructor(
     private val wordRepository: WordRepository,
-    val tts: TtsPlayer,
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(MineFilter.ALL)
@@ -59,8 +57,6 @@ class MyWordsViewModel @Inject constructor(
     fun removeFromMine(wordId: Long) {
         viewModelScope.launch { wordRepository.removeFromMine(wordId) }
     }
-
-    fun speak(word: String) = tts.speak(word)
 
     private fun matches(userWord: UserWord, f: MineFilter): Boolean = when (f) {
         MineFilter.ALL -> true

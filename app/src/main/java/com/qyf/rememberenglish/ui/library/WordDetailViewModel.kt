@@ -4,7 +4,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qyf.rememberenglish.data.repository.WordRepository
-import com.qyf.rememberenglish.data.speech.TtsPlayer
 import com.qyf.rememberenglish.domain.model.Word
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -23,7 +22,6 @@ data class WordDetailUiState(
 class WordDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val wordRepository: WordRepository,
-    val tts: TtsPlayer,
 ) : ViewModel() {
 
     val wordId: Long = savedStateHandle.get<Long>("wordId") ?: -1L
@@ -43,9 +41,5 @@ class WordDetailViewModel @Inject constructor(
             if (uiState.value.inMine) wordRepository.removeFromMine(wordId)
             else wordRepository.addToMine(wordId)
         }
-    }
-
-    fun speak() {
-        uiState.value.word?.let { tts.speak(it.word) }
     }
 }

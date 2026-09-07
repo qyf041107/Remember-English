@@ -3,7 +3,6 @@ package com.qyf.rememberenglish.ui.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qyf.rememberenglish.data.repository.WordRepository
-import com.qyf.rememberenglish.data.speech.TtsPlayer
 import com.qyf.rememberenglish.domain.model.Word
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -31,7 +30,6 @@ data class LibraryUiState(
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val wordRepository: WordRepository,
-    val tts: TtsPlayer,
 ) : ViewModel() {
 
     private val query = MutableStateFlow("")
@@ -59,6 +57,4 @@ class LibraryViewModel @Inject constructor(
     fun addToMine(wordId: Long) {
         viewModelScope.launch { wordRepository.addToMine(wordId) }
     }
-
-    fun speak(word: String) = tts.speak(word)
 }

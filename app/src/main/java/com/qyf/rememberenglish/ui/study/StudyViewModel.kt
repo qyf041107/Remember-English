@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qyf.rememberenglish.data.repository.StudyRepository
 import com.qyf.rememberenglish.data.repository.WordRepository
-import com.qyf.rememberenglish.data.speech.TtsPlayer
 import com.qyf.rememberenglish.domain.model.DailyProgress
 import com.qyf.rememberenglish.domain.model.QueueItem
 import com.qyf.rememberenglish.domain.model.ReviewRating
@@ -44,7 +43,6 @@ data class StudyUiState(
 class StudyViewModel @Inject constructor(
     private val studyRepository: StudyRepository,
     private val wordRepository: WordRepository,
-    val tts: TtsPlayer,
 ) : ViewModel() {
 
     private val session = MutableStateFlow<SessionState>(SessionState.Idle)
@@ -119,10 +117,6 @@ class StudyViewModel @Inject constructor(
     fun quit() {
         session.value = SessionState.Idle
         refreshQueueAvailability()
-    }
-
-    fun speak() {
-        (session.value as? SessionState.Studying)?.word?.let { tts.speak(it.word) }
     }
 
     private suspend fun loadWord(item: QueueItem): Word? =
