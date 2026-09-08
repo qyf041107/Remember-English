@@ -25,6 +25,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -169,6 +170,42 @@ fun ProfileScreen(
             }
         }
 
+        SectionTitle(stringResource(R.string.profile_cloud_ocr))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.profile_cloud_ocr), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = stringResource(R.string.profile_cloud_ocr_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.settings.cloudOcrEnabled,
+                        onCheckedChange = viewModel::setCloudOcrEnabled,
+                    )
+                }
+                if (state.settings.cloudOcrEnabled) {
+                    HorizontalDivider()
+                    CloudKeyFields(
+                        savedApiKey = state.settings.baiduApiKey,
+                        savedSecretKey = state.settings.baiduSecretKey,
+                        onSave = viewModel::setBaiduKeys,
+                    )
+                }
+            }
+        }
+
         SectionTitle(stringResource(R.string.profile_about))
         Text(
             text = stringResource(R.string.profile_about_body),
@@ -196,6 +233,47 @@ fun ProfileScreen(
                 TextButton(onClick = { showTimePicker = false }) { Text("取消") }
             },
             text = { TimePicker(state = timeState) },
+        )
+    }
+}
+
+/** 云端手写识别密钥输入：本地编辑态 + 显式保存（避免每次击键写 DataStore） */
+@Composable
+private fun CloudKeyFields(
+    savedApiKey: String,
+    savedSecretKey: String,
+    onSave: (String, String) -> Unit,
+) {
+    var apiKey by remember(savedApiKey) { mutableStateOf(savedApiKey) }
+    var secretKey by remember(savedSecretKey) { mutableStateOf(savedSecretKey) }
+    val changed = apiKey.trim() != savedApiKey || secretKey.trim() != savedSecretKey
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        OutlinedTextField(
+            value = apiKey,
+            onValueChange = { apiKey = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(stringResource(R.string.profile_cloud_api_hint)) },
+            singleLine = true,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = secretKey,
+            onValueChange = { secretKey = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(stringResource(R.string.profile_cloud_secret_hint)) },
+            singleLine = true,
+        )
+        TextButton(
+            onClick = { onSave(apiKey, secretKey) },
+            enabled = changed,
+            modifier = Modifier.align(Alignment.End),
+        ) {
+            Text(stringResource(R.string.profile_cloud_save))
+        }
+        Text(
+            text = stringResource(R.string.profile_cloud_help),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

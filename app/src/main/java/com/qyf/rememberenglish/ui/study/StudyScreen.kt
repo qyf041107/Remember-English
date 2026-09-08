@@ -1,5 +1,6 @@
 package com.qyf.rememberenglish.ui.study
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,9 +33,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qyf.rememberenglish.R
-import com.qyf.rememberenglish.domain.model.ReviewRating
+import com.qyf.rememberenglish.domain.model.AnswerRating
+import com.qyf.rememberenglish.domain.model.DailyProgress
 
-/** 今日学习：进度 + 学习会话（卡片翻转，三键评分）（CLAUDE.md 屏幕清单） */
+/** 今日学习：进度 + 加权随机会话（英文优先、点屏显义、三键记分）（CLAUDE.md 第五节） */
 @Composable
 fun StudyScreen(
     viewModel: StudyViewModel = hiltViewModel(),
@@ -60,14 +62,14 @@ fun StudyScreen(
 
         when (val s = state.session) {
             SessionState.Idle -> IdleContent(state, onStart = viewModel::start)
-            is SessionState.Studying -> StudyingContent(s, viewModel)
+            is SessionState.Studying -> StudyingContent(s, state.nextInSeconds, viewModel)
             SessionState.Finished -> FinishedContent(onFinish = viewModel::quit)
         }
     }
 }
 
 @Composable
-private fun ProgressCard(progress: com.qyf.rememberenglish.domain.model.DailyProgress) {
+private fun ProgressCard(progress: DailyProgress) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -77,34 +79,17 @@ private fun ProgressCard(progress: com.qyf.rememberenglish.domain.model.DailyPro
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = stringResource(
-                    R.string.study_progress_new,
-                    progress.newLearned.coerceAtMost(progress.newTarget),
-                    progress.newTarget,
+                    R.string.study_progress,
+                    progress.masteredToday.coerceAtMost(progress.target),
+                    progress.target,
                 ),
                 style = MaterialTheme.typography.labelLarge,
             )
             Spacer(modifier = Modifier.height(6.dp))
             LinearProgressIndicator(
                 progress = {
-                    if (progress.newTarget == 0) 1f
-                    else (progress.newLearned.toFloat() / progress.newTarget).coerceIn(0f, 1f)
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = stringResource(
-                    R.string.study_progress_review,
-                    progress.reviewsDone.coerceAtMost(progress.reviewsDue),
-                    progress.reviewsDue,
-                ),
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            LinearProgressIndicator(
-                progress = {
-                    if (progress.reviewsDue == 0) 1f
-                    else (progress.reviewsDone.toFloat() / progress.reviewsDue).coerceIn(0f, 1f)
+                    if (progress.target == 0) 1f
+                    else (progress.masteredToday.toFloat() / progress.target).coerceIn(0f, 1f)
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -117,7 +102,7 @@ private fun IdleContent(state: StudyUiState, onStart: () -> Unit) {
     val progress = state.progress
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (progress != null && progress.isAllDone) {
+            if (progress != null && progress.isDone) {
                 Icon(
                     imageVector = Icons.Filled.CheckCircle,
                     contentDescription = null,
@@ -131,12 +116,12 @@ private fun IdleContent(state: StudyUiState, onStart: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = stringResource(R.string.study_done_body),
+                    text = stringResource(R.string.study_done_body, progress.masteredToday),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
-            } else if (!state.hasTodayQueue) {
+            } else if (!state.hasWords) {
                 Text(
                     text = stringResource(R.string.study_idle_no_words),
                     style = MaterialTheme.typography.bodyLarge,
@@ -153,7 +138,11 @@ private fun IdleContent(state: StudyUiState, onStart: () -> Unit) {
 }
 
 @Composable
-private fun StudyingContent(s: SessionState.Studying, viewModel: StudyViewModel) {
+private fun StudyingContent(
+    s: SessionState.Studying,
+    nextInSeconds: Int,
+    viewModel: StudyViewModel,
+) {
     val word = s.word
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -161,14 +150,8 @@ private fun StudyingContent(s: SessionState.Studying, viewModel: StudyViewModel)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End,
         ) {
-            Text(
-                text = "${s.index + 1}/${s.queue.size}",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             TextButton(onClick = viewModel::quit) {
                 Text(stringResource(R.string.study_quit))
             }
@@ -177,7 +160,10 @@ private fun StudyingContent(s: SessionState.Studying, viewModel: StudyViewModel)
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .weight(1f)
+                .clickable {
+                    if (s.awaitingNext) viewModel.skipWait() else viewModel.reveal()
+                },
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         ) {
@@ -220,46 +206,48 @@ private fun StudyingContent(s: SessionState.Studying, viewModel: StudyViewModel)
                         }
                     }
                 } else {
-                    OutlinedButton(onClick = viewModel::reveal) {
-                        Text(stringResource(R.string.study_show_meaning))
-                    }
+                    Text(
+                        text = stringResource(R.string.study_reveal_hint),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        if (s.revealed) {
+        if (s.awaitingNext) {
+            // 答错/不清楚：停留展示释义，倒计时结束自动进入下一个（点击卡片可跳过）
+            Text(
+                text = stringResource(R.string.study_next_in, nextInSeconds),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+        } else {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                OutlinedButton(
-                    onClick = { viewModel.rate(ReviewRating.AGAIN) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.study_again), color = MaterialTheme.colorScheme.error)
-                }
-                OutlinedButton(
-                    onClick = { viewModel.rate(ReviewRating.HARD) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.study_hard))
-                }
                 Button(
-                    onClick = { viewModel.rate(ReviewRating.GOOD) },
+                    onClick = { viewModel.rate(AnswerRating.KNOW) },
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text(stringResource(R.string.study_good))
+                    Text(stringResource(R.string.study_know))
                 }
-            }
-        } else {
-            Button(
-                onClick = viewModel::reveal,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-            ) {
-                Text(stringResource(R.string.study_show_meaning))
+                OutlinedButton(
+                    onClick = { viewModel.rate(AnswerRating.WRONG) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.study_wrong), color = MaterialTheme.colorScheme.error)
+                }
+                OutlinedButton(
+                    onClick = { viewModel.rate(AnswerRating.UNCLEAR) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.study_unclear))
+                }
             }
         }
         Spacer(modifier = Modifier.height(8.dp))

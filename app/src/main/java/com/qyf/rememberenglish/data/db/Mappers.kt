@@ -1,10 +1,7 @@
 package com.qyf.rememberenglish.data.db
 
-import com.qyf.rememberenglish.data.db.entity.DailyStatEntity
 import com.qyf.rememberenglish.data.db.entity.DictWordEntity
 import com.qyf.rememberenglish.data.db.entity.UserWordEntity
-import com.qyf.rememberenglish.domain.model.DailyProgress
-import com.qyf.rememberenglish.domain.model.LearningState
 import com.qyf.rememberenglish.domain.model.UserWord
 import com.qyf.rememberenglish.domain.model.Word
 import kotlinx.serialization.builtins.ListSerializer
@@ -30,43 +27,28 @@ object Mappers {
         ukphone = ukphone,
         meanings = decodeMeanings(meanings),
         isCustom = source == DictWordEntity.SOURCE_CUSTOM,
+        isPhrase = source == DictWordEntity.SOURCE_PHRASE,
     )
 
     fun UserWordEntity.toUserWord(): UserWord = UserWord(
         id = id,
         wordId = wordId,
         addedAt = addedAt,
-        state = LearningState.fromCode(state),
-        ease = ease,
-        intervalDays = intervalDays,
-        reps = reps,
-        lapses = lapses,
-        streak = streak,
-        dueAt = dueAt,
+        score = score,
+        wrongCount = wrongCount,
+        unclearCount = unclearCount,
+        lastAnsweredAt = lastAnsweredAt,
         isSuspended = isSuspended,
-        isMastered = isMastered,
     )
 
     fun UserWord.toEntity(): UserWordEntity = UserWordEntity(
         id = id,
         wordId = wordId,
         addedAt = addedAt,
-        state = state.code,
-        ease = ease,
-        intervalDays = intervalDays,
-        reps = reps,
-        lapses = lapses,
-        streak = streak,
-        dueAt = dueAt,
+        score = score,
+        wrongCount = wrongCount,
+        unclearCount = unclearCount,
+        lastAnsweredAt = lastAnsweredAt,
         isSuspended = isSuspended,
-        isMastered = isMastered,
-    )
-
-    fun DailyStatEntity.toProgress(newTarget: Int): DailyProgress = DailyProgress(
-        day = day,
-        newLearned = newLearned,
-        newTarget = newTarget,
-        reviewsDone = reviewsDone,
-        reviewsDue = reviewsDueAtDayStart,
     )
 }

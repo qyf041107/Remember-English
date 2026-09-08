@@ -1,32 +1,58 @@
 package com.qyf.rememberenglish.ui.add
 
+import android.graphics.Bitmap
+import android.graphics.Matrix
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.qyf.rememberenglish.data.ocr.ImageEnhancer
+import com.qyf.rememberenglish.data.online.BaiduHandwritingClient
 import com.qyf.rememberenglish.data.repository.AddWordsResult
 import com.qyf.rememberenglish.data.repository.WordRepository
+import com.qyf.rememberenglish.data.settings.SettingsRepository
 import com.qyf.rememberenglish.domain.model.Word
 import com.qyf.rememberenglish.domain.ocr.WordExtractor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-/** 候选词：命中词库显示释义；未命中为自定义词（加入时入库） */
+/** 候选词：命中词库显示释义；未命中为自定义词（加入时入库）；freq=真题词频（无数据 null） */
 data class CandidateWord(
     val text: String,
     val matched: Word?,
+    val freq: Int? = null,
+)
+
+/** 候选词排序（CLAUDE.md 第五节，用户 2026-09-07 要求考频优先）：词频降序 → 词库命中 → 未命中 */
+private val CANDIDATE_ORDER = compareBy<CandidateWord>(
+    { it.freq == null },
+    { -(it.freq ?: 0) },
+    { it.matched == null },
 )
 
 data class AddWordUiState(
     val candidates: List<CandidateWord> = emptyList(),
     /** 已勾选的单词（字符串唯一） */
     val selected: Set<String> = emptySet(),
-    val manualInput: String = "",
     /** 冻结识别（点画面暂停，方便勾选） */
     val frozen: Boolean = false,
+    /** 手写增强（灰度+对比度拉伸），实时识别与拍照/相册共用 */
+    val enhance: Boolean = false,
+    /** 拍照/相册图片识别中 */
+    val recognizing: Boolean = false,
+    /** 图片识别失败（Screen 弹 Snackbar 后 consume） */
+    val photoFailed: Boolean = false,
+    /** 云端识别失败已回退本地（Screen 提示后 consume） */
+    val cloudFailed: Boolean = false,
     val adding: Boolean = false,
     /** 最近一次加入结果（Screen 侧用资源字符串格式化） */
     val result: AddWordsResult? = null,
@@ -35,12 +61,15 @@ data class AddWordUiState(
 @HiltViewModel
 class AddWordViewModel @Inject constructor(
     private val wordRepository: WordRepository,
+    private val settingsRepository: SettingsRepository,
+    private val baiduHandwritingClient: BaiduHandwritingClient,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(AddWordUiState())
     val ui: StateFlow<AddWordUiState> = _ui.asStateFlow()
 
     private var lastRawText = ""
+    private val photoRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
     /** 实时识别回调：提取 → 词库匹配 → 更新候选（保留已勾选） */
     fun onOcrText(rawText: String) {
@@ -49,11 +78,85 @@ class AddWordViewModel @Inject constructor(
         val tokens = WordExtractor.extract(rawText)
         if (tokens.isEmpty()) return
         viewModelScope.launch {
-            // 考研词库命中的排前面（Kotlin 排序稳定，组内保持画面出现顺序），未命中的自定义词排后面
+            // 考频优先排序（CLAUDE.md 第五节）：有真题词频的按词频降序在前，
+            // 词库命中但无词频的次之，未命中的自定义词最后；组内保持画面出现顺序
             val candidates = tokens.map { token ->
-                CandidateWord(text = token, matched = wordRepository.findByWord(token))
-            }.sortedByDescending { it.matched != null }
+                CandidateWord(
+                    text = token,
+                    matched = wordRepository.findByWord(token),
+                    freq = wordRepository.freqOf(token),
+                )
+            }.sortedWith(CANDIDATE_ORDER)
             _ui.update { it.copy(candidates = candidates) }
+        }
+    }
+
+    /**
+     * 拍照/相册静态识别（手写词录入主路径，用户 2026-09-08）：
+     * 云端手写识别开关开启且密钥已填 → 优先百度手写 OCR（识别率更高），
+     * 失败自动回退本地 ML Kit；本地路径下手写增强开启时先做灰度+对比度拉伸。
+     * 结果整批替换候选列表并冻结实时流（点画面恢复）。
+     */
+    fun recognizePhoto(bitmap: Bitmap, rotationDegrees: Int) {
+        if (_ui.value.recognizing) return
+        _ui.update { it.copy(recognizing = true, cloudFailed = false) }
+        viewModelScope.launch {
+            // 云端优先（用户 2026-09-08：离线模型手写正确率不够）
+            val settings = settingsRepository.settingsFlow.first()
+            if (settings.cloudOcrEnabled) {
+                val upright = if (rotationDegrees != 0) rotate(bitmap, rotationDegrees) else bitmap
+                val text = runCatching {
+                    baiduHandwritingClient.recognize(settings.baiduApiKey, settings.baiduSecretKey, upright)
+                }.getOrNull()
+                if (text != null) {
+                    onPhotoText(text)
+                    _ui.update { it.copy(recognizing = false) }
+                    return@launch
+                }
+                _ui.update { it.copy(cloudFailed = true) }
+            }
+
+            // 本地回退：ML Kit + 可选手写增强
+            val prepared = if (_ui.value.enhance) {
+                withContext(Dispatchers.Default) { ImageEnhancer.enhance(bitmap) }
+            } else {
+                bitmap
+            }
+            photoRecognizer.process(InputImage.fromBitmap(prepared, rotationDegrees))
+                .addOnSuccessListener { result -> onPhotoText(result.text) }
+                .addOnFailureListener {
+                    _ui.update { state -> state.copy(photoFailed = true) }
+                }
+                .addOnCompleteListener {
+                    _ui.update { state -> state.copy(recognizing = false) }
+                }
+        }
+    }
+
+    /** 拍照代理帧未带 EXIF，云端识别前先转正 */
+    private fun rotate(bitmap: Bitmap, degrees: Int): Bitmap {
+        val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    private fun onPhotoText(rawText: String) {
+        val tokens = WordExtractor.extract(rawText)
+        if (tokens.isEmpty()) return
+        viewModelScope.launch {
+            val mapped = tokens.map { token ->
+                CandidateWord(
+                    text = token,
+                    matched = wordRepository.findByWord(token),
+                    freq = wordRepository.freqOf(token),
+                )
+            }.sortedWith(CANDIDATE_ORDER)
+            _ui.update { state ->
+                state.copy(
+                    candidates = mapped,
+                    selected = state.selected intersect mapped.map { it.text }.toSet(),
+                    frozen = true,
+                )
+            }
         }
     }
 
@@ -65,24 +168,13 @@ class AddWordViewModel @Inject constructor(
         }
     }
 
-    fun setManualInput(value: String) {
-        _ui.update { it.copy(manualInput = value) }
-    }
-
-    /** 手动输入加入：与 OCR 同一管线（命中→加词；未命中→自定义词） */
-    fun addManual() {
-        val input = _ui.value.manualInput.trim().lowercase()
-        if (input.isEmpty()) return
-        addWords(listOf(input), clearInput = true)
-    }
-
     fun addSelected() {
         val selected = _ui.value.selected.toList()
         if (selected.isEmpty()) return
-        addWords(selected, clearInput = false)
+        addWords(selected)
     }
 
-    private fun addWords(words: List<String>, clearInput: Boolean) {
+    private fun addWords(words: List<String>) {
         _ui.update { it.copy(adding = true) }
         viewModelScope.launch {
             val result: AddWordsResult = wordRepository.addWords(words)
@@ -90,7 +182,6 @@ class AddWordViewModel @Inject constructor(
                 state.copy(
                     adding = false,
                     selected = emptySet(),
-                    manualInput = if (clearInput) "" else state.manualInput,
                     candidates = state.candidates.filterNot { it.text in words },
                     result = result,
                 )
@@ -102,8 +193,28 @@ class AddWordViewModel @Inject constructor(
         _ui.update { it.copy(result = null) }
     }
 
+    fun notifyPhotoFailed() {
+        _ui.update { it.copy(photoFailed = true) }
+    }
+
+    fun consumePhotoFailed() {
+        _ui.update { it.copy(photoFailed = false) }
+    }
+
+    fun consumeCloudFailed() {
+        _ui.update { it.copy(cloudFailed = false) }
+    }
+
     fun toggleFrozen() {
         lastRawText = ""
         _ui.update { it.copy(frozen = !it.frozen) }
+    }
+
+    fun toggleEnhance() {
+        _ui.update { it.copy(enhance = !it.enhance) }
+    }
+
+    override fun onCleared() {
+        photoRecognizer.close()
     }
 }

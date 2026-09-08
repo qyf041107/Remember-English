@@ -1,16 +1,12 @@
 package com.qyf.rememberenglish.domain.model
 
-/** 今日进度（CLAUDE.md：完成判定 = 新词达标 且 复习达快照数） */
+/** 今日进度（CLAUDE.md：完成判定 = 当天背会的不同词数 ≥ 每日目标） */
 data class DailyProgress(
     val day: String,
-    val newLearned: Int,
-    val newTarget: Int,
-    val reviewsDone: Int,
-    val reviewsDue: Int,
+    /** 当天背会的不同词数（我知道/不清楚去重计数） */
+    val masteredToday: Int,
+    val target: Int,
 ) {
-    val isNewDone: Boolean get() = newLearned >= newTarget
-    val isReviewDone: Boolean get() = reviewsDone >= reviewsDue
-    val isAllDone: Boolean get() = isNewDone && isReviewDone
-    val remainingNew: Int get() = (newTarget - newLearned).coerceAtLeast(0)
-    val remainingReviews: Int get() = (reviewsDue - reviewsDone).coerceAtLeast(0)
+    val isDone: Boolean get() = masteredToday >= target
+    val remaining: Int get() = (target - masteredToday).coerceAtLeast(0)
 }

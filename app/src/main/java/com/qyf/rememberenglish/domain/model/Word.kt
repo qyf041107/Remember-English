@@ -8,4 +8,6 @@ data class Word(
     val ukphone: String,
     val meanings: List<String>,
     val isCustom: Boolean,
+    /** 词组/短语（dict_word source=2，用户 2026-09-08 新增） */
+    val isPhrase: Boolean = false,
 )

@@ -64,6 +64,7 @@ fun WordDetailScreen(
         WordDetailContent(
             word = word,
             inMine = state.inMine,
+            freq = state.freq,
             onToggleMine = viewModel::toggleMine,
             modifier = Modifier
                 .padding(padding)
@@ -76,6 +77,7 @@ fun WordDetailScreen(
 private fun WordDetailContent(
     word: Word,
     inMine: Boolean,
+    freq: Int?,
     onToggleMine: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -106,6 +108,14 @@ private fun WordDetailContent(
         Spacer(modifier = Modifier.height(16.dp))
         HorizontalDivider()
         Spacer(modifier = Modifier.height(16.dp))
+        freq?.let {
+            Text(
+                text = stringResource(R.string.detail_freq, it),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
         word.meanings.forEach { meaning ->
             Text(
                 text = meaning,

@@ -19,12 +19,13 @@ data class DictWordEntity(
     val ukphone: String,
     /** JSON 数组字符串，如 ["n. 苹果","v. 给……定价"] */
     val meanings: String,
-    /** 0 = 内置红宝书；1 = 用户自定义（OCR/手动） */
+    /** 0 = 内置红宝书；1 = 用户自定义（OCR/手动）；2 = 内置词组/短语（用户 2026-09-08 新增） */
     val source: Int,
     val createdAt: Long,
 ) {
     companion object {
         const val SOURCE_BUILTIN = 0
         const val SOURCE_CUSTOM = 1
+        const val SOURCE_PHRASE = 2
     }
 }

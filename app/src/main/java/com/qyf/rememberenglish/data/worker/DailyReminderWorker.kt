@@ -16,12 +16,11 @@ import com.qyf.rememberenglish.data.repository.StudyRepository
 import com.qyf.rememberenglish.data.settings.SettingsRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import java.time.LocalDate
 import kotlinx.coroutines.flow.first
 
 /**
  * 每日提醒检查（CLAUDE.md 第五节）：
- * 到点检查当日完成度 —— 未完成才发 heads-up 通知；已完成或当天已提醒过则静默。
+ * 到点检查当日完成度 —— 背会词数未达标才发 heads-up 通知；已完成或当天已提醒过则静默。
  */
 @HiltWorker
 class DailyReminderWorker @AssistedInject constructor(
@@ -35,25 +34,23 @@ class DailyReminderWorker @AssistedInject constructor(
         val settings = settingsRepository.settingsFlow.first()
         if (!settings.reminderEnabled) return Result.success()
 
-        val today = LocalDate.now().toString()
+        val today = studyRepository.todayString()
         // 当天已提醒过 → 不重复打扰
         if (settings.lastNotifiedDay == today) return Result.success()
 
         val progress = studyRepository.getTodayProgress()
-        if (progress.isAllDone) return Result.success()
+        if (progress.isDone) return Result.success()
 
         val manager = NotificationManagerCompat.from(applicationContext)
         // 通知权限被关 → 静默跳过（"我的"页有开启引导）
         if (!manager.areNotificationsEnabled()) return Result.success()
 
-        val remainingNew = progress.remainingNew
-        val remainingReview = progress.remainingReviews
-        val text = buildString {
-            val parts = mutableListOf<String>()
-            if (remainingNew > 0) parts.add("新词 $remainingNew 个")
-            if (remainingReview > 0) parts.add("复习 $remainingReview 个")
-            append(if (parts.isEmpty()) "今天的任务还没完成，加油！" else "还剩 ${parts.joinToString("、")}，坚持就是胜利！")
-        }
+        val text = applicationContext.getString(
+            R.string.notification_body,
+            progress.masteredToday,
+            progress.target,
+            progress.remaining,
+        )
 
         val notification = NotificationCompat.Builder(applicationContext, RememberEnglishApp.CHANNEL_REMIND)
             .setSmallIcon(R.drawable.ic_notification)

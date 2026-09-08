@@ -9,16 +9,19 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.qyf.rememberenglish.R
 
-/** 路由常量（CLAUDE.md：底部导航 4 tab + 词详情 + 扫词添加） */
+/** 路由常量（CLAUDE.md：底部导航 4 tab + 词详情 + 单词背诵 + 扫词添加） */
 object Route {
     const val TODAY = "today"
     const val LIBRARY = "library"
     const val MINE = "mine"
     const val PROFILE = "profile"
     const val WORD_DETAIL = "word/{wordId}"
+    const val WORD_STUDY = "word_study/{userWordId}"
     const val ADD_WORD = "add"
 
     fun wordDetail(wordId: Long) = "word/$wordId"
+
+    fun wordStudy(userWordId: Long) = "word_study/$userWordId"
 }
 
 data class TopLevelDestination(

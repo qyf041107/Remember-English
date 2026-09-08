@@ -8,9 +8,12 @@ import com.qyf.rememberenglish.data.db.dao.DictWordDao
 import com.qyf.rememberenglish.data.db.dao.UserWordDao
 import com.qyf.rememberenglish.data.db.dao.UserWordWithWord
 import com.qyf.rememberenglish.data.db.entity.DictWordEntity
+import com.qyf.rememberenglish.data.freq.WordFormsProvider
+import com.qyf.rememberenglish.data.freq.WordFreqProvider
 import com.qyf.rememberenglish.domain.model.UserWord
 import com.qyf.rememberenglish.domain.model.Word
-import com.qyf.rememberenglish.domain.srs.SrsScheduler
+import com.qyf.rememberenglish.domain.search.FuzzyMatcher
+import com.qyf.rememberenglish.domain.srs.ScoreScheduler
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -29,15 +32,45 @@ data class AddWordsResult(
     val customCreated: Int,
 )
 
+/** 词库搜索结果；[note] 为变形词提示（如搜 went 时显示"原形 go"） */
+data class SearchHit(
+    val word: Word,
+    val note: String? = null,
+)
+
 @Singleton
 class WordRepository @Inject constructor(
     private val dictWordDao: DictWordDao,
     private val userWordDao: UserWordDao,
+    private val wordFreqProvider: WordFreqProvider,
+    private val wordFormsProvider: WordFormsProvider,
 ) {
 
-    /** 词库搜索（只搜内置红宝书词库） */
-    suspend fun search(query: String, limit: Int = 100): List<Word> =
-        dictWordDao.search(query.trim()).map { it.toWord() }
+    /**
+     * 词库搜索（模糊匹配，用户 2026-09-08 要求）：
+     * 词库词 + 词组全量打分排序（精确 > 前缀 > 包含 > 编辑距离≤2，同档词频高在前）；
+     * 若查询词是某词的变形（went），把原形条目置顶并注明。
+     */
+    suspend fun search(query: String, limit: Int = 30): List<SearchHit> {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return emptyList()
+        val heads = dictWordDao.getAllHeads()
+        val ranked = FuzzyMatcher.rank(q, heads, { it.word }, { freqOf(it.word) }, limit)
+        val entities: Map<Long, DictWordEntity> = if (ranked.isEmpty()) {
+            emptyMap()
+        } else {
+            dictWordDao.getByIds(ranked.map { it.id }).associateBy { it.id }
+        }
+        val hits = ranked.mapNotNull { entities[it.id] }.map { SearchHit(it.toWord()) }
+        // 搜的是变形词（went/wolves）→ 原形条目置顶展示
+        val base = wordFormsProvider.baseOf(q)
+        if (base != null && hits.none { it.word.word == base }) {
+            dictWordDao.findByWord(base)?.let { found ->
+                return listOf(SearchHit(found.toWord(), note = "“$q”的原形")) + hits
+            }
+        }
+        return hits
+    }
 
     fun observeWord(wordId: Long): Flow<Word?> =
         dictWordDao.observeById(wordId).map { it?.toWord() }
@@ -46,19 +79,30 @@ class WordRepository @Inject constructor(
 
     suspend fun findByWord(word: String): Word? = dictWordDao.findByWord(word)?.toWord()
 
+    /** 真题词频（无数据返回 null；来源见 CLAUDE.md 第八节） */
+    fun freqOf(word: String): Int? = wordFreqProvider.freqOf(word)
+
     fun observeMyWords(): Flow<List<MyWordItem>> =
         userWordDao.observeAllWithWord().map { list -> list.map { it.toMyWordItem() } }
 
     suspend fun isInMine(wordId: Long): Boolean = userWordDao.findByWordId(wordId) != null
 
+    /** 按 user_word 行 id 取词卡（单词背诵页用） */
+    suspend fun getUserWord(id: Long): UserWord? = userWordDao.getById(id)?.toUserWord()
+
     suspend fun addToMine(wordId: Long): Boolean {
         if (userWordDao.findByWordId(wordId) != null) return false
-        userWordDao.insert(SrsScheduler.newWord(wordId, System.currentTimeMillis()).toEntity())
+        userWordDao.insert(ScoreScheduler.newWord(wordId, System.currentTimeMillis()).toEntity())
         return true
     }
 
     suspend fun removeFromMine(wordId: Long) {
         userWordDao.deleteByWordId(wordId)
+    }
+
+    /** 左滑移出的撤销：按原样恢复词卡（保留分数与错记数） */
+    suspend fun restoreUserWord(userWord: UserWord) {
+        userWordDao.insert(userWord.toEntity())
     }
 
     /** 插入自定义词（OCR 未命中/手动添加），已存在则直接返回现有词条 */

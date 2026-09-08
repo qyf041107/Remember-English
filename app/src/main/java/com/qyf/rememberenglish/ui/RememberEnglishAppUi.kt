@@ -28,6 +28,7 @@ import com.qyf.rememberenglish.ui.navigation.Route
 import com.qyf.rememberenglish.ui.navigation.TOP_LEVEL_DESTINATIONS
 import com.qyf.rememberenglish.ui.profile.ProfileScreen
 import com.qyf.rememberenglish.ui.study.StudyScreen
+import com.qyf.rememberenglish.ui.study.WordStudyScreen
 
 /** 应用主壳：底部 4 tab + NavHost + 通知 deep link（CLAUDE.md 屏幕清单） */
 @Composable
@@ -83,7 +84,7 @@ fun RememberEnglishAppUi(
             }
             composable(Route.MINE) {
                 MyWordsScreen(
-                    onWordClick = { navController.navigate(Route.wordDetail(it)) },
+                    onWordStudyClick = { navController.navigate(Route.wordStudy(it)) },
                     onAddClick = { navController.navigate(Route.ADD_WORD) },
                 )
             }
@@ -93,6 +94,12 @@ fun RememberEnglishAppUi(
                 arguments = listOf(navArgument("wordId") { type = NavType.LongType }),
             ) {
                 WordDetailScreen(onBack = { navController.popBackStack() })
+            }
+            composable(
+                Route.WORD_STUDY,
+                arguments = listOf(navArgument("userWordId") { type = NavType.LongType }),
+            ) {
+                WordStudyScreen(onBack = { navController.popBackStack() })
             }
             composable(Route.ADD_WORD) {
                 AddWordScreen(onDone = { navController.popBackStack() })

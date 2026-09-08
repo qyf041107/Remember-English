@@ -12,24 +12,33 @@
     <string name="channel_remind_name">每日学习提醒</string>
     <string name="channel_remind_desc">当天学习任务未完成时发送通知督促完成</string>
     <string name="notification_title">今日单词还没背完</string>
+    <string name="notification_body">今天已背会 %1$d/%2$d 个，还差 %3$d 个，坚持就是胜利！</string>
 
     <!-- 词库 -->
     <string name="library_search_hint">搜索单词</string>
     <string name="library_search_empty">输入单词查询释义，点击 + 加入"我要背"</string>
     <string name="library_no_result">没有找到这个单词</string>
     <string name="library_dict_missing">词库正在导入…</string>
+    <string name="library_clear">清空搜索</string>
+    <string name="library_online_loading">本地词库未收录，正在联网查询…</string>
+    <string name="library_online_title">在线查询结果</string>
+    <string name="library_online_add">加入我要背</string>
 
     <!-- 词详情 -->
     <string name="detail_add">加入我要背</string>
     <string name="detail_remove">移出我要背</string>
     <string name="detail_not_found">词条不存在</string>
     <string name="detail_custom_tag">自定义词（扫词/手动添加）</string>
+    <string name="detail_phrase_tag">词组/短语</string>
     <string name="detail_back">返回</string>
     <string name="detail_in_mine">已加入我要背</string>
     <string name="detail_not_in_mine">加入我要背</string>
 
     <!-- 我要背 -->
     <string name="mine_add">添加单词</string>
+    <string name="mine_remove">移出我要背</string>
+    <string name="mine_removed">已移出 %1$s</string>
+    <string name="mine_undo">撤销</string>
     <string name="mine_empty">还没有要背的单词。\n去"词库"搜索，或点 + 扫词添加。</string>
     <string name="mine_filter_all">全部</string>
     <string name="mine_filter_new">新词</string>
@@ -39,37 +48,42 @@
     <string name="mine_stat_new">新词</string>
     <string name="mine_stat_learning">学习中</string>
     <string name="mine_stat_mastered">已掌握</string>
-    <string name="mine_due_now">待复习</string>
-    <string name="mine_due_today">今天 %1$s</string>
+    <string name="mine_score">%1$s/%2$s 分</string>
+    <string name="add_freq_tag">真题 %1$d 次</string>
+    <string name="detail_freq">真题出现 %1$d 次</string>
 
     <!-- 今日学习 -->
     <string name="study_title">今日学习</string>
-    <string name="study_start">开始学习</string>
-    <string name="study_done_title">今日已完成</string>
-    <string name="study_done_body">今天的任务都完成了，明天见！</string>
+    <string name="study_start">随机提问</string>
+    <string name="study_single_title">背诵</string>
+    <string name="study_done_title">今日目标已完成</string>
+    <string name="study_done_body">今天背会 %1$d 个单词，真棒！明天见！</string>
     <string name="study_idle_no_words">先去"词库"或"我要背"添加要背的单词吧</string>
-    <string name="study_progress_new">新词 %1$d/%2$d</string>
-    <string name="study_progress_review">复习 %1$d/%2$d</string>
-    <string name="study_show_meaning">显示释义</string>
-    <string name="study_again">不认识</string>
-    <string name="study_hard">模糊</string>
-    <string name="study_good">认识</string>
+    <string name="study_progress">今日背会 %1$d/%2$d 个</string>
+    <string name="study_reveal_hint">如果不会，请点击屏幕</string>
+    <string name="study_know">我知道</string>
+    <string name="study_unclear">不清楚</string>
+    <string name="study_wrong">我不会</string>
     <string name="study_finish">完成学习</string>
-    <string name="study_session_done">本组完成！</string>
-    <string name="study_continue">继续</string>
+    <string name="study_next_in">%1$d 秒后进入下一个 · 点击跳过</string>
+    <string name="study_session_done">本轮完成！</string>
     <string name="study_quit">结束学习</string>
     <string name="study_no_meaning">暂无释义（自定义词）</string>
 
     <!-- 扫词添加 -->
     <string name="add_title">扫词添加</string>
     <string name="add_back">返回</string>
-    <string name="add_frozen_hint">已冻结 · 点此继续识别</string>
-    <string name="add_live_hint">对准英文文本 · 点此暂停识别</string>
+    <string name="add_frozen_hint">已暂停识别 · 点画面继续</string>
+    <string name="add_live_hint">点画面可暂停识别 · 拍照/相册可录手写词</string>
     <string name="add_camera_needed">需要相机权限才能扫词</string>
     <string name="add_grant_camera">授予相机权限</string>
     <string name="add_empty_hint">将镜头对准单词，识别结果会显示在这里</string>
-    <string name="add_manual_hint">手动输入单词</string>
-    <string name="add_manual_join">加入</string>
+    <string name="add_enhance">手写增强</string>
+    <string name="add_album">相册</string>
+    <string name="add_photo">拍照</string>
+    <string name="add_recognizing">正在识别图片…</string>
+    <string name="add_photo_failed">图片识别失败，请重试</string>
+    <string name="add_cloud_fallback">云端识别失败，已改用本地识别</string>
     <string name="add_batch_empty">勾选单词加入我要背</string>
     <string name="add_batch_n">加入所选 %1$d 个</string>
     <string name="add_custom_tag">自定义</string>
@@ -80,7 +94,7 @@
     <string name="add_result_already">，%1$d 个已在我要背</string>
 
     <!-- 我的 -->
-    <string name="profile_target">每日新词目标</string>
+    <string name="profile_target">每日背会目标</string>
     <string name="profile_reminder">每日提醒</string>
     <string name="profile_reminder_time">提醒时间</string>
     <string name="profile_notification_permission">通知权限未开启，点此前往设置</string>
@@ -91,6 +105,12 @@
     <string name="profile_dark_system">跟随系统</string>
     <string name="profile_dark_light">浅色</string>
     <string name="profile_dark_dark">深色</string>
+    <string name="profile_cloud_ocr">云端手写识别（百度）</string>
+    <string name="profile_cloud_ocr_desc">拍照/相册识别手写单词时优先用云端，识别更准；实时扫词与失败回退仍用离线识别</string>
+    <string name="profile_cloud_api_hint">API Key</string>
+    <string name="profile_cloud_secret_hint">Secret Key</string>
+    <string name="profile_cloud_save">保存密钥</string>
+    <string name="profile_cloud_help">获取方式：cloud.baidu.com 注册并实名认证 → 控制台搜索"文字识别"创建应用 → 复制 API Key 与 Secret Key 填入上方保存。密钥仅存本机，不会上传。个人认证每月有免费调用额度。</string>
     <string name="profile_about">关于</string>
-    <string name="profile_about_body">记英语 —— 简约的考研背单词应用。\n词库来源：qwerty-learner（GPL-3.0）。</string>
+    <string name="profile_about_body">记英语 —— 简约的考研背单词应用。\n词库来源：qwerty-learner（GPL-3.0）。\n词组释义来源：ECDICT（MIT）。\n真题词频来源：NETEMVocabulary（CC BY-NC-SA 4.0）。\n本地词库未收录时自动联网查询（有道词典公开接口）。</string>
 </resources>

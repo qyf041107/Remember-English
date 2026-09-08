@@ -56,4 +56,12 @@ class ProfileViewModel @Inject constructor(
     fun setDarkMode(mode: String) {
         viewModelScope.launch { settingsRepository.setDarkMode(mode) }
     }
+
+    fun setCloudOcrEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setCloudOcrEnabled(enabled) }
+    }
+
+    fun setBaiduKeys(apiKey: String, secretKey: String) {
+        viewModelScope.launch { settingsRepository.setBaiduKeys(apiKey, secretKey) }
+    }
 }

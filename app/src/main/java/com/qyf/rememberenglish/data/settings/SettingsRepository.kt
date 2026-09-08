@@ -25,6 +25,10 @@ data class AppSettings(
     val reminderMinute: Int = SettingsRepository.DEFAULT_REMINDER_MINUTE,
     val lastNotifiedDay: String? = null,
     val darkMode: String = DarkMode.SYSTEM,
+    /** 云端手写识别（百度，用户 2026-09-08 要求）：密钥用户自填，只存本地 */
+    val cloudOcrEnabled: Boolean = false,
+    val baiduApiKey: String = "",
+    val baiduSecretKey: String = "",
 )
 
 object DarkMode {
@@ -44,6 +48,9 @@ class SettingsRepository @Inject constructor(
         val REMINDER_MINUTE = intPreferencesKey("reminder_minute")
         val LAST_NOTIFIED_DAY = stringPreferencesKey("last_notified_day")
         val DARK_MODE = stringPreferencesKey("dark_mode")
+        val CLOUD_OCR_ENABLED = booleanPreferencesKey("cloud_ocr_enabled")
+        val BAIDU_API_KEY = stringPreferencesKey("baidu_api_key")
+        val BAIDU_SECRET_KEY = stringPreferencesKey("baidu_secret_key")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -54,6 +61,9 @@ class SettingsRepository @Inject constructor(
             reminderMinute = p[Keys.REMINDER_MINUTE] ?: DEFAULT_REMINDER_MINUTE,
             lastNotifiedDay = p[Keys.LAST_NOTIFIED_DAY],
             darkMode = p[Keys.DARK_MODE] ?: DarkMode.SYSTEM,
+            cloudOcrEnabled = p[Keys.CLOUD_OCR_ENABLED] ?: false,
+            baiduApiKey = p[Keys.BAIDU_API_KEY] ?: "",
+            baiduSecretKey = p[Keys.BAIDU_SECRET_KEY] ?: "",
         )
     }
 
@@ -88,6 +98,17 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setDarkMode(mode: String) {
         context.dataStore.edit { it[Keys.DARK_MODE] = mode }
+    }
+
+    suspend fun setCloudOcrEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.CLOUD_OCR_ENABLED] = enabled }
+    }
+
+    suspend fun setBaiduKeys(apiKey: String, secretKey: String) {
+        context.dataStore.edit {
+            it[Keys.BAIDU_API_KEY] = apiKey.trim()
+            it[Keys.BAIDU_SECRET_KEY] = secretKey.trim()
+        }
     }
 
     companion object {

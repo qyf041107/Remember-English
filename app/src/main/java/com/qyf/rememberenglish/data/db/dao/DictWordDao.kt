@@ -7,19 +7,21 @@ import androidx.room.Query
 import com.qyf.rememberenglish.data.db.entity.DictWordEntity
 import kotlinx.coroutines.flow.Flow
 
+/** 轻量词头（模糊搜索排序用，避免整表带释义加载） */
+data class WordHead(
+    val id: Long,
+    val word: String,
+)
+
 @Dao
 interface DictWordDao {
 
-    /** 词库搜索：前缀命中优先，其余包含命中，再按字母序（简约搜索体验） */
-    @Query(
-        """
-        SELECT * FROM dict_word
-        WHERE source = 0 AND word LIKE '%' || :query || '%'
-        ORDER BY CASE WHEN word LIKE :query || '%' THEN 0 ELSE 1 END, word
-        LIMIT :limit
-        """,
-    )
-    suspend fun search(query: String, limit: Int = 100): List<DictWordEntity>
+    /** 搜索排序用的轻量词头（词库词 source=0 + 词组 source=2，不含自定义词） */
+    @Query("SELECT id, word FROM dict_word WHERE source IN (0, 2)")
+    suspend fun getAllHeads(): List<WordHead>
+
+    @Query("SELECT * FROM dict_word WHERE id IN (:ids)")
+    suspend fun getByIds(ids: List<Long>): List<DictWordEntity>
 
     @Query("SELECT * FROM dict_word WHERE word = :word COLLATE NOCASE LIMIT 1")
     suspend fun findByWord(word: String): DictWordEntity?
@@ -35,6 +37,9 @@ interface DictWordDao {
 
     @Query("SELECT COUNT(*) FROM dict_word")
     suspend fun count(): Int
+
+    @Query("SELECT COUNT(*) FROM dict_word WHERE source = :source")
+    suspend fun countBySource(source: Int): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(words: List<DictWordEntity>): List<Long>

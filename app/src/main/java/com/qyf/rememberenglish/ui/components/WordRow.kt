@@ -63,7 +63,7 @@ fun WordRow(
             if (word.meanings.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = word.meanings.first(),
+                    text = word.meanings.take(2).joinToString("；"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

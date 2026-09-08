@@ -2,7 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 纯离线应用：刻意不声明 INTERNET 权限（CLAUDE.md 第二节） -->
+    <!-- 联网查词兜底（用户 2026-09-08 批准）：仅本地词库+词组未收录时查询有道公开接口 -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- 相机：M4 扫词添加，运行时动态申请 -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />

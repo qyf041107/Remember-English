@@ -16,6 +16,8 @@ import kotlinx.coroutines.launch
 data class WordDetailUiState(
     val word: Word? = null,
     val inMine: Boolean = false,
+    /** 真题词频（无数据 null，CLAUDE.md 第五节） */
+    val freq: Int? = null,
 )
 
 @HiltViewModel
@@ -33,7 +35,11 @@ class WordDetailViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<WordDetailUiState> = combine(word, inMine) { w, mine ->
-        WordDetailUiState(word = w, inMine = mine)
+        WordDetailUiState(
+            word = w,
+            inMine = mine,
+            freq = w?.let { wordRepository.freqOf(it.word) },
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WordDetailUiState())
 
     fun toggleMine() {
