@@ -9,6 +9,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.qyf.rememberenglish.data.ocr.ImageEnhancer
 import com.qyf.rememberenglish.data.online.BaiduHandwritingClient
+import com.qyf.rememberenglish.data.online.OnlineDictClient
 import com.qyf.rememberenglish.data.repository.AddWordsResult
 import com.qyf.rememberenglish.data.repository.WordRepository
 import com.qyf.rememberenglish.data.settings.SettingsRepository
@@ -23,6 +24,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 /** 候选词：命中词库显示释义；未命中为自定义词（加入时入库）；freq=真题词频（无数据 null） */
@@ -53,6 +56,10 @@ data class AddWordUiState(
     val photoFailed: Boolean = false,
     /** 云端识别失败已回退本地（Screen 提示后 consume） */
     val cloudFailed: Boolean = false,
+    /** 拍照识别出的未收录词 → 联网查到的释义（空列表=联网也没查到） */
+    val onlineMeanings: Map<String, List<String>> = emptyMap(),
+    /** 正在联网查询释义的词 */
+    val onlineLoading: Set<String> = emptySet(),
     val adding: Boolean = false,
     /** 最近一次加入结果（Screen 侧用资源字符串格式化） */
     val result: AddWordsResult? = null,
@@ -63,6 +70,7 @@ class AddWordViewModel @Inject constructor(
     private val wordRepository: WordRepository,
     private val settingsRepository: SettingsRepository,
     private val baiduHandwritingClient: BaiduHandwritingClient,
+    private val onlineDictClient: OnlineDictClient,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(AddWordUiState())
@@ -70,6 +78,10 @@ class AddWordViewModel @Inject constructor(
 
     private var lastRawText = ""
     private val photoRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+
+    /** 拍照候选词联网查释义：会话内缓存（未查到也缓存，防重复请求），并发限 4 */
+    private val onlineMeaningCache = mutableMapOf<String, List<String>>()
+    private val lookupSemaphore = Semaphore(4)
 
     /** 实时识别回调：提取 → 词库匹配 → 更新候选（保留已勾选） */
     fun onOcrText(rawText: String) {
@@ -150,12 +162,38 @@ class AddWordViewModel @Inject constructor(
                     freq = wordRepository.freqOf(token),
                 )
             }.sortedWith(CANDIDATE_ORDER)
+            val missing = mapped.filter { it.matched == null && it.text !in onlineMeaningCache }
             _ui.update { state ->
                 state.copy(
                     candidates = mapped,
                     selected = state.selected intersect mapped.map { it.text }.toSet(),
                     frozen = true,
+                    // 已缓存的在线释义立即回填，未缓存的标记为查询中
+                    onlineMeanings = state.onlineMeanings + missing.mapNotNull { candidate ->
+                        onlineMeaningCache[candidate.text]?.let { candidate.text to it }
+                    }.toMap(),
+                    onlineLoading = missing.map { it.text }.toSet(),
                 )
+            }
+            // 未收录词联网查释义（用户 2026-09-08 要求：拍照界面也要有中文释义）
+            missing.forEach { candidate -> lookupOnline(candidate.text) }
+        }
+    }
+
+    /** 单个未收录词联网查释义；结果（含空）写入缓存并刷新 UI */
+    private fun lookupOnline(token: String) {
+        viewModelScope.launch {
+            lookupSemaphore.withPermit {
+                val meanings = runCatching {
+                    onlineDictClient.lookup(token)?.meanings
+                }.getOrNull().orEmpty()
+                onlineMeaningCache[token] = meanings
+                _ui.update { state ->
+                    state.copy(
+                        onlineMeanings = state.onlineMeanings + (token to meanings),
+                        onlineLoading = state.onlineLoading - token,
+                    )
+                }
             }
         }
     }

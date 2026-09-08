@@ -87,6 +87,8 @@
     <string name="add_batch_empty">勾选单词加入我要背</string>
     <string name="add_batch_n">加入所选 %1$d 个</string>
     <string name="add_custom_tag">自定义</string>
+    <string name="add_online_tag">在线</string>
+    <string name="add_online_meaning_loading">正在联网查询释义…</string>
     <string name="add_custom_will">词库未收录 · 将作为自定义词加入</string>
     <string name="add_no_meaning">暂无释义</string>
     <string name="add_result_added">已加入 %1$d 个</string>

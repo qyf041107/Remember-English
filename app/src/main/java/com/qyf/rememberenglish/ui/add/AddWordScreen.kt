@@ -251,6 +251,8 @@ fun AddWordScreen(
                             CandidateRow(
                                 candidate = candidate,
                                 selected = candidate.text in state.selected,
+                                onlineMeanings = state.onlineMeanings[candidate.text],
+                                onlineLoading = candidate.text in state.onlineLoading,
                                 onToggle = { viewModel.toggleSelect(candidate.text) },
                             )
                         }
@@ -344,11 +346,13 @@ private fun CameraPillButton(
     }
 }
 
-/** 候选词行（紧凑版）：点行勾选；选中高亮 + 对勾；右侧标注自定义/考频 */
+/** 候选词行（紧凑版）：点行勾选；选中高亮 + 对勾；未收录词显示联网释义；右侧标注自定义/在线/考频 */
 @Composable
 private fun CandidateRow(
     candidate: CandidateWord,
     selected: Boolean,
+    onlineMeanings: List<String>?,
+    onlineLoading: Boolean,
     onToggle: () -> Unit,
 ) {
     Row(
@@ -369,10 +373,13 @@ private fun CandidateRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            val meaning = candidate.matched?.meanings?.firstOrNull()
+            val localMeaning = candidate.matched?.meanings?.firstOrNull()
+            val onlineMeaning = onlineMeanings?.firstOrNull { it.isNotBlank() }
             Text(
                 text = when {
-                    meaning != null -> meaning
+                    localMeaning != null -> localMeaning
+                    onlineMeaning != null -> onlineMeaning
+                    onlineLoading -> stringResource(R.string.add_online_meaning_loading)
                     candidate.matched == null -> stringResource(R.string.add_custom_will)
                     else -> stringResource(R.string.add_no_meaning)
                 },
@@ -382,14 +389,20 @@ private fun CandidateRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (candidate.matched == null) {
-            Text(
+        val showOnlineTag = candidate.matched == null &&
+            onlineMeanings?.any { it.isNotBlank() } == true
+        when {
+            showOnlineTag -> Text(
+                text = stringResource(R.string.add_online_tag),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            candidate.matched == null -> Text(
                 text = stringResource(R.string.add_custom_tag),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
-        } else if (candidate.freq != null) {
-            Text(
+            candidate.freq != null -> Text(
                 text = stringResource(R.string.add_freq_tag, candidate.freq),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
