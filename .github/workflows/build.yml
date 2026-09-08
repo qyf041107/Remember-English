@@ -1,0 +1,47 @@
+name: Build APK
+
+# 每次 push 到 main 自动构建（Artifacts 可随时下载）；
+# 推送 v* 标签时额外发布 GitHub Release，手机可直接下载安装
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # 打 tag 时创建 Release 用
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 设置 Gradle（含缓存）
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 编译 + 单元测试
+        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest
+
+      - name: 上传构建产物（每次构建都可下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: 发布 Release（仅 v* 标签触发）
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/debug/app-debug.apk
+          body: |
+            记英语 ${{ github.ref_name }}
+
+            下载 app-debug.apk 安装（需要在手机上允许"安装未知来源应用"）。
+            调试签名，个人使用无影响；更新版本直接覆盖安装。

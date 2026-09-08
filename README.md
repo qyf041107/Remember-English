@@ -35,6 +35,14 @@
 - 每日固定时间（默认 20:00 可设置）检查当日目标完成度，未完成则发送 heads-up 系统通知督促；已完成或当天已提醒过则静默
 - 通知点击直达学习页；Android 13+ 动态申请通知权限
 
+## 下载安装
+
+无需编译：打开 [Releases 页面](https://github.com/qyf041107/Remember-English/releases)，下载最新版本的 `app-debug.apk` 到手机安装（需允许"安装未知来源应用"）。
+
+- 每次 push 代码，GitHub Actions 会自动构建，可在 [Actions 页面](https://github.com/qyf041107/Remember-English/actions) 的 Artifacts 里下载最新 APK
+- 正式版本会发布在 Releases（推送 `v*` 标签自动触发）
+- APK 为调试签名，个人使用无影响；更新版本直接覆盖安装
+
 ## 快速上手
 
 1. **加词**：在"词库"搜索加入，或用扫词页拍照/实时识别添加
