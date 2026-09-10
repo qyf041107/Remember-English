@@ -31,7 +31,7 @@ sealed interface SessionState {
         val userWord: UserWord,
         /** 是否已点击屏幕显示释义 */
         val revealed: Boolean,
-        /** 答错/不清楚后停留展示释义，倒计时后自动进入下一词（用户 2026-09-08 要求） */
+        /** 作答后停留展示释义（答对 1.5s / 答错 3s，可点击跳过），倒计时结束自动进入下一词 */
         val awaitingNext: Boolean = false,
     ) : SessionState
 
@@ -51,7 +51,7 @@ data class StudyUiState(
  * 学习会话（CLAUDE.md 第五节）：
  * 从「我要背」加权随机抽词（不会/不清楚的优先，已掌握 0.25 折），
  * 只显示英文，点击屏幕显示释义，三键自评记分；当天背会数达标即完成。
- * 答错/不清楚：停留当前词展示释义 3 秒（可点击跳过）再进入下一词。
+ * 作答后都停留展示中文释义：答对 1.5 秒确认背没背对，答错/不清楚 3 秒看清（均可点击跳过）。
  */
 @HiltViewModel
 class StudyViewModel @Inject constructor(
@@ -106,21 +106,22 @@ class StudyViewModel @Inject constructor(
                 session.value = SessionState.Finished
                 return@launch
             }
-            if (rating == AnswerRating.KNOW) {
-                advanceAfter(s.userWord.id)
-            } else {
-                // 我不会/不清楚：先展示中文释义 3 秒，让用户看清意思再走
-                session.value = s.copy(revealed = true, awaitingNext = true)
-                waitJob = launch {
-                    nextInSeconds.value = NEXT_WAIT_SECONDS
-                    while (nextInSeconds.value > 1) {
-                        delay(1_000)
-                        if (!isAwaiting(s.userWord.id)) return@launch
-                        nextInSeconds.value -= 1
-                    }
-                    delay(1_000)
-                    if (isAwaiting(s.userWord.id)) advanceAfter(s.userWord.id)
+            // 无论对错都展示中文释义：答对 1.5 秒确认背没背对，答错/不清楚 3 秒看清（用户 2026-09-10）
+            val waitMs = if (rating == AnswerRating.KNOW) KNOW_WAIT_MS else WRONG_WAIT_MS
+            session.value = s.copy(revealed = true, awaitingNext = true)
+            val wordId = s.userWord.id
+            waitJob = launch {
+                var remainingMs = waitMs
+                nextInSeconds.value = displaySeconds(remainingMs)
+                while (remainingMs > 0) {
+                    if (!isAwaiting(wordId)) return@launch
+                    val step = minOf(1_000L, remainingMs)
+                    delay(step)
+                    remainingMs -= step
+                    if (!isAwaiting(wordId)) return@launch
+                    if (remainingMs > 0) nextInSeconds.value = displaySeconds(remainingMs)
                 }
+                advanceAfter(wordId)
             }
         }
     }
@@ -161,7 +162,14 @@ class StudyViewModel @Inject constructor(
     private suspend fun loadWord(item: UserWord): Word? =
         wordRepository.getWord(item.wordId)
 
+    /** 倒计时展示秒数（向下取整，至少 1——1.5 秒的确认停留显示"1 秒"不夸大） */
+    private fun displaySeconds(ms: Long): Int = (ms / 1_000).toInt().coerceAtLeast(1)
+
     private companion object {
-        const val NEXT_WAIT_SECONDS = 3
+        /** 答对后展示释义确认时长（用户 2026-09-10） */
+        const val KNOW_WAIT_MS = 1_500L
+
+        /** 答错/不清楚后看清释义时长（用户 2026-09-08） */
+        const val WRONG_WAIT_MS = 3_000L
     }
 }
