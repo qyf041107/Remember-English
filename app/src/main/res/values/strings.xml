@@ -22,7 +22,6 @@
     <string name="library_clear">清空搜索</string>
     <string name="library_online_loading">本地词库未收录，正在联网查询…</string>
     <string name="library_online_title">在线查询结果</string>
-    <string name="library_online_add">加入我要背</string>
 
     <!-- 词详情 -->
     <string name="detail_add">加入我要背</string>

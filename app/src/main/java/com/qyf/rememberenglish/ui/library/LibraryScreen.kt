@@ -24,7 +24,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -193,23 +192,15 @@ private fun OnlineResultContent(
                     )
                 }
             }
-            if (added) {
+            // 与本地结果行一致（WordRow）：+ 加入 / ✓ 已加入，保持界面协调（用户 2026-09-10）
+            IconButton(onClick = onAdd, enabled = !added) {
                 Icon(
-                    imageVector = Icons.Filled.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 8.dp),
+                    imageVector = if (added) Icons.Filled.Check else Icons.Filled.Add,
+                    contentDescription = stringResource(
+                        if (added) R.string.detail_in_mine else R.string.detail_not_in_mine,
+                    ),
+                    tint = if (added) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            } else {
-                TextButton(onClick = onAdd, modifier = Modifier.padding(start = 8.dp)) {
-                    Icon(
-                        Icons.Filled.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.padding(start = 4.dp))
-                    Text(stringResource(R.string.library_online_add))
-                }
             }
         }
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))

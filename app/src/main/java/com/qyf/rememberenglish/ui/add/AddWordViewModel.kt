@@ -35,11 +35,15 @@ data class CandidateWord(
     val freq: Int? = null,
 )
 
-/** 候选词排序（CLAUDE.md 第五节，用户 2026-09-07 要求考频优先）：词频降序 → 词库命中 → 未命中 */
-private val CANDIDATE_ORDER = compareBy<CandidateWord>(
+/**
+ * 候选词排序（CLAUDE.md 第五节，用户 2026-09-07 要求考频优先；2026-09-10 扩展）：
+ * 词频降序 → 词库命中 → 有联网释义（"在线"）→ 纯自定义；sortedWith 稳定，组内保持画面出现顺序
+ */
+private fun candidateOrder(online: Map<String, List<String>>) = compareBy<CandidateWord>(
     { it.freq == null },
     { -(it.freq ?: 0) },
     { it.matched == null },
+    { online[it.text].isNullOrEmpty() },
 )
 
 data class AddWordUiState(
@@ -108,8 +112,8 @@ class AddWordViewModel @Inject constructor(
         if (WordExtractor.extract(rawText).filterNot { it in ignoredWords.value }.isEmpty()) return
         viewModelScope.launch {
             // 考频优先排序（CLAUDE.md 第五节）：有真题词频的按词频降序在前，
-            // 词库命中但无词频的次之，未命中的自定义词最后；组内保持画面出现顺序
-            val candidates = WordExtractor.extract(rawText)
+            // 词库命中次之，有联网释义的未收录词再次，纯自定义词最后；组内保持画面出现顺序
+            val mapped = WordExtractor.extract(rawText)
                 .filterNot { it in ignoredWords.value }
                 .map { token ->
                     CandidateWord(
@@ -117,12 +121,14 @@ class AddWordViewModel @Inject constructor(
                         matched = wordRepository.findByWord(token),
                         freq = wordRepository.freqOf(token),
                     )
-                }.sortedWith(CANDIDATE_ORDER)
-            _ui.update { it.copy(candidates = candidates) }
+                }
+            _ui.update { state ->
+                state.copy(candidates = mapped.sortedWith(candidateOrder(state.onlineMeanings)))
+            }
             // 已在我要背的词标注"已添加"（只查会话内没查过的词）
-            refreshInMine(candidates.map { it.text })
+            refreshInMine(mapped.map { it.text })
             // 未收录词联网查释义（用户 2026-09-10：识别出单词时就联网搜索；会话缓存防逐帧刷请求）
-            ensureOnlineLookups(candidates)
+            ensureOnlineLookups(mapped)
         }
     }
 
@@ -186,16 +192,17 @@ class AddWordViewModel @Inject constructor(
                         matched = wordRepository.findByWord(token),
                         freq = wordRepository.freqOf(token),
                     )
-                }.sortedWith(CANDIDATE_ORDER)
+                }
             _ui.update { state ->
+                // 已缓存的在线释义立即回填，并参与排序（在线词排在自定义词前）
+                val prefill = mapped.mapNotNull { candidate ->
+                    onlineMeaningCache[candidate.text]?.let { candidate.text to it }
+                }.toMap()
                 state.copy(
-                    candidates = mapped,
+                    candidates = mapped.sortedWith(candidateOrder(state.onlineMeanings + prefill)),
                     selected = state.selected intersect mapped.map { it.text }.toSet(),
                     frozen = true,
-                    // 已缓存的在线释义立即回填
-                    onlineMeanings = state.onlineMeanings + mapped.mapNotNull { candidate ->
-                        onlineMeaningCache[candidate.text]?.let { candidate.text to it }
-                    }.toMap(),
+                    onlineMeanings = state.onlineMeanings + prefill,
                 )
             }
             refreshInMine(mapped.map { it.text })
@@ -226,7 +233,7 @@ class AddWordViewModel @Inject constructor(
         missing.forEach { candidate -> lookupOnline(candidate.text) }
     }
 
-    /** 单个未收录词联网查释义；结果（含空）写入缓存并刷新 UI */
+    /** 单个未收录词联网查释义；结果（含空）写入缓存并刷新 UI，查到释义的词实时上浮到自定义词前 */
     private fun lookupOnline(token: String) {
         viewModelScope.launch {
             lookupSemaphore.withPermit {
@@ -235,9 +242,11 @@ class AddWordViewModel @Inject constructor(
                 }.getOrNull().orEmpty()
                 onlineMeaningCache[token] = meanings
                 _ui.update { state ->
+                    val allMeanings = state.onlineMeanings + (token to meanings)
                     state.copy(
-                        onlineMeanings = state.onlineMeanings + (token to meanings),
+                        onlineMeanings = allMeanings,
                         onlineLoading = state.onlineLoading - token,
+                        candidates = state.candidates.sortedWith(candidateOrder(allMeanings)),
                     )
                 }
             }
