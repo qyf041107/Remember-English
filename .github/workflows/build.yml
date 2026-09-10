@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 完整拉取，读取标签附注作更新日志
 
       - name: 设置 JDK 17
         uses: actions/setup-java@v4
@@ -35,13 +37,23 @@ jobs:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
+      - name: 生成 Release 更新日志（取自标签附注）
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          git tag -l --format='%(contents)' "${GITHUB_REF_NAME}" > release_notes.txt
+          # 标签没有附注时退回默认说明
+          if [ ! -s release_notes.txt ]; then
+            cat > release_notes.txt <<EOF
+          记英语 ${GITHUB_REF_NAME}
+
+          下载 app-debug.apk 安装（需要在手机上允许"安装未知来源应用"）。
+          调试签名，个人使用无影响；更新版本直接覆盖安装。
+          EOF
+          fi
+
       - name: 发布 Release（仅 v* 标签触发）
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: app/build/outputs/apk/debug/app-debug.apk
-          body: |
-            记英语 ${{ github.ref_name }}
-
-            下载 app-debug.apk 安装（需要在手机上允许"安装未知来源应用"）。
-            调试签名，个人使用无影响；更新版本直接覆盖安装。
+          body_path: release_notes.txt
