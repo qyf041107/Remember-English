@@ -87,6 +87,10 @@ class WordRepository @Inject constructor(
 
     suspend fun isInMine(wordId: Long): Boolean = userWordDao.findByWordId(wordId) != null
 
+    /** 批量查已在我要背的单词（扫词页"已添加"标注，用户 2026-09-10） */
+    suspend fun findMineWords(words: List<String>): Set<String> =
+        if (words.isEmpty()) emptySet() else userWordDao.findMineWords(words).toSet()
+
     /** 按 user_word 行 id 取词卡（单词背诵页用） */
     suspend fun getUserWord(id: Long): UserWord? = userWordDao.getById(id)?.toUserWord()
 

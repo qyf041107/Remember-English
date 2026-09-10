@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalDate
@@ -51,6 +52,9 @@ class SettingsRepository @Inject constructor(
         val CLOUD_OCR_ENABLED = booleanPreferencesKey("cloud_ocr_enabled")
         val BAIDU_API_KEY = stringPreferencesKey("baidu_api_key")
         val BAIDU_SECRET_KEY = stringPreferencesKey("baidu_secret_key")
+
+        // 扫词页忽略词（用户 2026-09-10：date/sun 等 OCR 伪词每次都出现，忽略后不再打扰）
+        val OCR_IGNORED_WORDS = stringSetPreferencesKey("ocr_ignored_words")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -74,6 +78,19 @@ class SettingsRepository @Inject constructor(
             DarkMode.DARK -> true
             else -> null
         }
+    }
+
+    /** 扫词页忽略词集合（持久化；忽略的伪词不再出现在候选列表） */
+    val ocrIgnoredWordsFlow: Flow<Set<String>> = context.dataStore.data.map { p ->
+        p[Keys.OCR_IGNORED_WORDS] ?: emptySet()
+    }
+
+    suspend fun addOcrIgnoredWord(word: String) {
+        context.dataStore.edit { it[Keys.OCR_IGNORED_WORDS] = (it[Keys.OCR_IGNORED_WORDS] ?: emptySet()) + word }
+    }
+
+    suspend fun removeOcrIgnoredWord(word: String) {
+        context.dataStore.edit { it[Keys.OCR_IGNORED_WORDS] = (it[Keys.OCR_IGNORED_WORDS] ?: emptySet()) - word }
     }
 
     suspend fun setDailyNewTarget(value: Int) {

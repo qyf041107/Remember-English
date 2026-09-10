@@ -94,6 +94,18 @@
     <string name="add_result_added">已加入 %1$d 个</string>
     <string name="add_result_custom">（新增自定义 %1$d 个）</string>
     <string name="add_result_already">，%1$d 个已在我要背</string>
+    <string name="add_in_mine_tag">已添加</string>
+    <string name="add_ignore">忽略</string>
+    <string name="add_ignored">已忽略「%1$s」，之后不再出现在候选里</string>
+
+    <!-- 提醒可靠性 -->
+    <string name="notification_action_study">去背单词</string>
+    <string name="profile_reminder_guide_title">提醒收不到？</string>
+    <string name="profile_reminder_guide_desc">手机管家清理后台后会拦住提醒通知。完成下面设置可显著提高到达率：</string>
+    <string name="profile_reminder_state">每天 %1$s 已开启</string>
+    <string name="profile_guide_autostart">① 允许自启动</string>
+    <string name="profile_guide_battery">② 省电策略设为"无限制"</string>
+    <string name="profile_guide_float_notify">③ 允许悬浮通知（弹窗显示）</string>
 
     <!-- 我的 -->
     <string name="profile_target">每日背会目标</string>

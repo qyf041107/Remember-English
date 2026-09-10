@@ -66,9 +66,11 @@ class LibraryViewModel @Inject constructor(
                 flow {
                     emit(SearchOutcome(emptyList(), OnlineLookupState.Loading))
                     val hits = wordRepository.search(q)
-                    // 本地（词库+词组）无结果 → 联网兜底（用户 2026-09-08 批准）
-                    val online = if (hits.isEmpty()) {
-                        val found = onlineDictClient.lookup(q)
+                    // 本地（词库+词组）无精确匹配 → 联网兜底（用户 2026-09-08 批准；2026-09-10 扩展：
+                    // 模糊匹配有近似结果但缺精确词时也联网，如 wifi/serendipity 等未收录词）
+                    val normalized = q.trim().lowercase()
+                    val online = if (hits.none { it.word.word == normalized }) {
+                        val found = onlineDictClient.lookup(normalized)
                         if (found != null) OnlineLookupState.Found(found) else OnlineLookupState.NotFound
                     } else {
                         OnlineLookupState.Idle

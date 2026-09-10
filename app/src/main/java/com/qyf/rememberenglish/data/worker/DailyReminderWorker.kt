@@ -57,6 +57,9 @@ class DailyReminderWorker @AssistedInject constructor(
             .setContentTitle(applicationContext.getString(R.string.notification_title))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            // 进度条 +「去背单词」快捷按钮（用户 2026-09-10，灵动岛替代方案）
+            .setProgress(progress.target, progress.masteredToday, false)
+            .addAction(0, applicationContext.getString(R.string.notification_action_study), deepLinkIntent())
             .setContentIntent(deepLinkIntent())
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)

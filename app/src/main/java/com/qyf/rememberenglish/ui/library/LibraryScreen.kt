@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qyf.rememberenglish.R
+import com.qyf.rememberenglish.data.online.OnlineWord
 import com.qyf.rememberenglish.data.repository.SearchHit
 import com.qyf.rememberenglish.ui.components.WordRow
 
@@ -76,6 +77,25 @@ fun LibraryScreen(
         when {
             state.query.isBlank() -> EmptyHint(stringResource(R.string.library_search_empty))
             state.results.isNotEmpty() -> LazyColumn {
+                // 本地无精确匹配时也联网兜底，结果置顶显示（用户 2026-09-10）
+                when (val online = state.online) {
+                    OnlineLookupState.Loading -> item(key = "online-loading") {
+                        Text(
+                            text = stringResource(R.string.library_online_loading),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        )
+                    }
+                    is OnlineLookupState.Found -> item(key = "online-found") {
+                        OnlineResultContent(
+                            online = online.word,
+                            added = state.onlineAdded,
+                            onAdd = viewModel::addOnlineWordToMine,
+                        )
+                    }
+                    else -> {}
+                }
                 items(state.results, key = { "hit-${it.word.id}" }) { hit ->
                     Column {
                         WordRow(
@@ -111,89 +131,88 @@ fun LibraryScreen(
                     )
                 }
             }
-            state.online is OnlineLookupState.Found -> OnlineResultSection(
-                state = state.online as OnlineLookupState.Found,
-                added = state.onlineAdded,
-                onAdd = viewModel::addOnlineWordToMine,
-            )
+            state.online is OnlineLookupState.Found -> LazyColumn {
+                item {
+                    OnlineResultContent(
+                        online = (state.online as OnlineLookupState.Found).word,
+                        added = state.onlineAdded,
+                        onAdd = viewModel::addOnlineWordToMine,
+                    )
+                }
+            }
             else -> EmptyHint(stringResource(R.string.library_no_result))
         }
     }
 }
 
-/** 本地未收录 → 在线结果展示，可一键入库加入我要背 */
+/** 在线结果内容（无滚动容器，可嵌入本地结果列表或独立展示），可一键入库加入我要背 */
 @Composable
-private fun OnlineResultSection(
-    state: OnlineLookupState.Found,
+private fun OnlineResultContent(
+    online: com.qyf.rememberenglish.data.online.OnlineWord,
     added: Boolean,
     onAdd: () -> Unit,
 ) {
-    val online = state.word
-    LazyColumn {
-        item {
-            Text(
-                text = stringResource(R.string.library_online_title),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-        }
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+    Column {
+        Text(
+            text = stringResource(R.string.library_online_title),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = online.word,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (online.usphone.isNotBlank()) {
+                        Spacer(modifier = Modifier.padding(start = 8.dp))
                         Text(
-                            text = online.word,
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (online.usphone.isNotBlank()) {
-                            Spacer(modifier = Modifier.padding(start = 8.dp))
-                            Text(
-                                text = "/${online.usphone}/",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    online.meanings.forEach { meaning ->
-                        Text(
-                            text = meaning,
+                            text = "/${online.usphone}/",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 2.dp),
                         )
                     }
                 }
-                if (added) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 8.dp),
+                online.meanings.forEach { meaning ->
+                    Text(
+                        text = meaning,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
                     )
-                } else {
-                    TextButton(onClick = onAdd, modifier = Modifier.padding(start = 8.dp)) {
-                        Icon(
-                            Icons.Filled.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(modifier = Modifier.padding(start = 4.dp))
-                        Text(stringResource(R.string.library_online_add))
-                    }
                 }
             }
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            if (added) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            } else {
+                TextButton(onClick = onAdd, modifier = Modifier.padding(start = 8.dp)) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.padding(start = 4.dp))
+                    Text(stringResource(R.string.library_online_add))
+                }
+            }
         }
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
     }
 }
 

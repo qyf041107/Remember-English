@@ -30,11 +30,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -112,6 +114,17 @@ fun AddWordScreen(
         if (state.cloudFailed) {
             snackbarHostState.showSnackbar(context.getString(R.string.add_cloud_fallback))
             viewModel.consumeCloudFailed()
+        }
+    }
+    // 忽略伪词（date/sun 等）：Snackbar 可撤销
+    LaunchedEffect(state.ignoredWord) {
+        state.ignoredWord?.let { word ->
+            val action = snackbarHostState.showSnackbar(
+                message = context.getString(R.string.add_ignored, word),
+                actionLabel = context.getString(R.string.mine_undo),
+            )
+            viewModel.consumeIgnoredWord()
+            if (action == SnackbarResult.ActionPerformed) viewModel.unignoreWord(word)
         }
     }
 
@@ -251,9 +264,11 @@ fun AddWordScreen(
                             CandidateRow(
                                 candidate = candidate,
                                 selected = candidate.text in state.selected,
+                                inMine = candidate.text in state.inMine,
                                 onlineMeanings = state.onlineMeanings[candidate.text],
                                 onlineLoading = candidate.text in state.onlineLoading,
                                 onToggle = { viewModel.toggleSelect(candidate.text) },
+                                onIgnore = { viewModel.ignoreWord(candidate.text) },
                             )
                         }
                     }
@@ -346,14 +361,16 @@ private fun CameraPillButton(
     }
 }
 
-/** 候选词行（紧凑版）：点行勾选；选中高亮 + 对勾；未收录词显示联网释义；右侧标注自定义/在线/考频 */
+/** 候选词行（紧凑版）：点行勾选；选中高亮 + 对勾；未收录词显示联网释义；右侧标注已添加/自定义/在线/考频 + 忽略 */
 @Composable
 private fun CandidateRow(
     candidate: CandidateWord,
     selected: Boolean,
+    inMine: Boolean,
     onlineMeanings: List<String>?,
     onlineLoading: Boolean,
     onToggle: () -> Unit,
+    onIgnore: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -392,6 +409,12 @@ private fun CandidateRow(
         val showOnlineTag = candidate.matched == null &&
             onlineMeanings?.any { it.isNotBlank() } == true
         when {
+            // 已在我要背：着重标注，杜绝重复添加（用户 2026-09-10）
+            inMine -> Text(
+                text = stringResource(R.string.add_in_mine_tag),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
             showOnlineTag -> Text(
                 text = stringResource(R.string.add_online_tag),
                 style = MaterialTheme.typography.labelMedium,
@@ -417,5 +440,16 @@ private fun CandidateRow(
                 modifier = Modifier.size(18.dp),
             )
         }
+        Spacer(modifier = Modifier.size(6.dp))
+        // 忽略伪词（date/sun 等）：点 ✕ 从候选移除并持久化，Snackbar 可撤销
+        Icon(
+            imageVector = Icons.Filled.Close,
+            contentDescription = stringResource(R.string.add_ignore),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(20.dp)
+                .clickable(onClick = onIgnore)
+                .padding(2.dp),
+        )
     }
 }

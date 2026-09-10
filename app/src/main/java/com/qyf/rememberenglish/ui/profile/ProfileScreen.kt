@@ -2,6 +2,7 @@ package com.qyf.rememberenglish.ui.profile
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -47,6 +48,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qyf.rememberenglish.R
+import com.qyf.rememberenglish.RememberEnglishApp
 import com.qyf.rememberenglish.data.settings.DarkMode
 
 /** 我的：每日目标 / 每日提醒 / 深色模式 / 统计 / 关于（CLAUDE.md 屏幕清单） */
@@ -133,6 +135,9 @@ fun ProfileScreen(
                             )
                         }
                     }
+                    HorizontalDivider()
+                    // 提醒可靠性引导（用户 2026-09-10：清理后台后收不到提醒）
+                    ReminderGuideBlock(context = context)
                 }
             }
         }
@@ -235,6 +240,65 @@ fun ProfileScreen(
             text = { TimePicker(state = timeState) },
         )
     }
+}
+
+/** 提醒可靠性引导：自启动 / 省电策略 / 悬浮通知（HyperOS 清后台会拦提醒，用户 2026-09-10） */
+@Composable
+private fun ReminderGuideBlock(context: android.content.Context) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(
+            text = stringResource(R.string.profile_reminder_guide_title),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Text(
+            text = stringResource(R.string.profile_reminder_guide_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        listOf(
+            R.string.profile_guide_autostart to { openAutostartSettings(context) },
+            R.string.profile_guide_battery to { openAppDetailsSettings(context) },
+            R.string.profile_guide_float_notify to { openChannelSettings(context) },
+        ).forEach { (labelRes, onClick) ->
+            TextButton(
+                onClick = onClick,
+                modifier = Modifier.padding(vertical = 0.dp),
+            ) {
+                Text(stringResource(labelRes))
+            }
+        }
+    }
+}
+
+/** 小米自启动管理页；非 MIUI 或被禁时回退应用详情 */
+private fun openAutostartSettings(context: android.content.Context) {
+    try {
+        context.startActivity(
+            Intent()
+                .setClassName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    } catch (_: Exception) {
+        openAppDetailsSettings(context)
+    }
+}
+
+/** 应用详情页（MIUI 里含省电策略入口） */
+private fun openAppDetailsSettings(context: android.content.Context) {
+    context.startActivity(
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
+}
+
+/** 通知渠道设置（悬浮通知开关） */
+private fun openChannelSettings(context: android.content.Context) {
+    context.startActivity(
+        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            .putExtra(Settings.EXTRA_CHANNEL_ID, RememberEnglishApp.CHANNEL_REMIND)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
 }
 
 /** 云端手写识别密钥输入：本地编辑态 + 显式保存（避免每次击键写 DataStore） */

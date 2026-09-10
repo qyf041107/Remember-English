@@ -34,6 +34,13 @@ interface UserWordDao {
     @Query("SELECT wordId FROM user_word WHERE isSuspended = 0")
     fun observeAllWordIds(): Flow<List<Long>>
 
+    /** 扫词页"已添加"标注：给一组单词，返回其中已在我要背的（用户 2026-09-10） */
+    @Query(
+        "SELECT dw.word FROM user_word uw JOIN dict_word dw ON dw.id = uw.wordId " +
+            "WHERE uw.isSuspended = 0 AND dw.word IN (:words)",
+    )
+    suspend fun findMineWords(words: List<String>): List<String>
+
     /** 我的页统计：全部与已掌握（满 5 分）词数 */
     @Query("SELECT COUNT(*) FROM user_word WHERE isSuspended = 0")
     fun observeTotalCount(): Flow<Int>

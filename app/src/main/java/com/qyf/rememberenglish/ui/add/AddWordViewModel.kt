@@ -46,6 +46,8 @@ data class AddWordUiState(
     val candidates: List<CandidateWord> = emptyList(),
     /** 已勾选的单词（字符串唯一） */
     val selected: Set<String> = emptySet(),
+    /** 已在我要背的单词（着重标注"已添加"，不可勾选；用户 2026-09-10） */
+    val inMine: Set<String> = emptySet(),
     /** 冻结识别（点画面暂停，方便勾选） */
     val frozen: Boolean = false,
     /** 手写增强（灰度+对比度拉伸），实时识别与拍照/相册共用 */
@@ -56,10 +58,12 @@ data class AddWordUiState(
     val photoFailed: Boolean = false,
     /** 云端识别失败已回退本地（Screen 提示后 consume） */
     val cloudFailed: Boolean = false,
-    /** 拍照识别出的未收录词 → 联网查到的释义（空列表=联网也没查到） */
+    /** 未收录词 → 联网查到的释义（空列表=联网也没查到） */
     val onlineMeanings: Map<String, List<String>> = emptyMap(),
     /** 正在联网查询释义的词 */
     val onlineLoading: Set<String> = emptySet(),
+    /** 刚忽略的词（Screen 弹 Snackbar 可撤销，null=无） */
+    val ignoredWord: String? = null,
     val adding: Boolean = false,
     /** 最近一次加入结果（Screen 侧用资源字符串格式化） */
     val result: AddWordsResult? = null,
@@ -77,29 +81,48 @@ class AddWordViewModel @Inject constructor(
     val ui: StateFlow<AddWordUiState> = _ui.asStateFlow()
 
     private var lastRawText = ""
+    /** 最近一次拍照/相册的原文（撤销忽略后恢复候选用） */
+    private var lastPhotoRaw = ""
     private val photoRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
     /** 拍照候选词联网查释义：会话内缓存（未查到也缓存，防重复请求），并发限 4 */
     private val onlineMeaningCache = mutableMapOf<String, List<String>>()
     private val lookupSemaphore = Semaphore(4)
 
+    /** 忽略词（持久化，date/sun 等伪词不再出现；用户 2026-09-10） */
+    private val ignoredWords = MutableStateFlow<Set<String>>(emptySet())
+
+    /** 会话内已查过"是否已加入"的词，避免每帧重复打 DB */
+    private val mineChecked = mutableSetOf<String>()
+
+    init {
+        viewModelScope.launch {
+            settingsRepository.ocrIgnoredWordsFlow.collect { ignoredWords.value = it }
+        }
+    }
+
     /** 实时识别回调：提取 → 词库匹配 → 更新候选（保留已勾选） */
     fun onOcrText(rawText: String) {
         if (_ui.value.frozen || rawText == lastRawText) return
         lastRawText = rawText
-        val tokens = WordExtractor.extract(rawText)
-        if (tokens.isEmpty()) return
+        if (WordExtractor.extract(rawText).filterNot { it in ignoredWords.value }.isEmpty()) return
         viewModelScope.launch {
             // 考频优先排序（CLAUDE.md 第五节）：有真题词频的按词频降序在前，
             // 词库命中但无词频的次之，未命中的自定义词最后；组内保持画面出现顺序
-            val candidates = tokens.map { token ->
-                CandidateWord(
-                    text = token,
-                    matched = wordRepository.findByWord(token),
-                    freq = wordRepository.freqOf(token),
-                )
-            }.sortedWith(CANDIDATE_ORDER)
+            val candidates = WordExtractor.extract(rawText)
+                .filterNot { it in ignoredWords.value }
+                .map { token ->
+                    CandidateWord(
+                        text = token,
+                        matched = wordRepository.findByWord(token),
+                        freq = wordRepository.freqOf(token),
+                    )
+                }.sortedWith(CANDIDATE_ORDER)
             _ui.update { it.copy(candidates = candidates) }
+            // 已在我要背的词标注"已添加"（只查会话内没查过的词）
+            refreshInMine(candidates.map { it.text })
+            // 未收录词联网查释义（用户 2026-09-10：识别出单词时就联网搜索；会话缓存防逐帧刷请求）
+            ensureOnlineLookups(candidates)
         }
     }
 
@@ -152,32 +175,55 @@ class AddWordViewModel @Inject constructor(
     }
 
     private fun onPhotoText(rawText: String) {
-        val tokens = WordExtractor.extract(rawText)
-        if (tokens.isEmpty()) return
+        lastPhotoRaw = rawText
+        if (WordExtractor.extract(rawText).filterNot { it in ignoredWords.value }.isEmpty()) return
         viewModelScope.launch {
-            val mapped = tokens.map { token ->
-                CandidateWord(
-                    text = token,
-                    matched = wordRepository.findByWord(token),
-                    freq = wordRepository.freqOf(token),
-                )
-            }.sortedWith(CANDIDATE_ORDER)
-            val missing = mapped.filter { it.matched == null && it.text !in onlineMeaningCache }
+            val mapped = WordExtractor.extract(rawText)
+                .filterNot { it in ignoredWords.value }
+                .map { token ->
+                    CandidateWord(
+                        text = token,
+                        matched = wordRepository.findByWord(token),
+                        freq = wordRepository.freqOf(token),
+                    )
+                }.sortedWith(CANDIDATE_ORDER)
             _ui.update { state ->
                 state.copy(
                     candidates = mapped,
                     selected = state.selected intersect mapped.map { it.text }.toSet(),
                     frozen = true,
-                    // 已缓存的在线释义立即回填，未缓存的标记为查询中
-                    onlineMeanings = state.onlineMeanings + missing.mapNotNull { candidate ->
+                    // 已缓存的在线释义立即回填
+                    onlineMeanings = state.onlineMeanings + mapped.mapNotNull { candidate ->
                         onlineMeaningCache[candidate.text]?.let { candidate.text to it }
                     }.toMap(),
-                    onlineLoading = missing.map { it.text }.toSet(),
                 )
             }
-            // 未收录词联网查释义（用户 2026-09-08 要求：拍照界面也要有中文释义）
-            missing.forEach { candidate -> lookupOnline(candidate.text) }
+            refreshInMine(mapped.map { it.text })
+            ensureOnlineLookups(mapped)
         }
+    }
+
+    /** 已在我要背的词进 state.inMine；会话内每词只查一次 DB */
+    private suspend fun refreshInMine(tokens: List<String>) {
+        val unknown = tokens.filter { it !in mineChecked }
+        if (unknown.isEmpty()) return
+        mineChecked.addAll(unknown)
+        val found = wordRepository.findMineWords(unknown)
+        if (found.isNotEmpty()) _ui.update { it.copy(inMine = it.inMine + found) }
+    }
+
+    /** 未收录且未在查询中的词 → 联网查释义（缓存/加载中的跳过），拍照与实时流共用 */
+    private fun ensureOnlineLookups(candidates: List<CandidateWord>) {
+        val missing = candidates.filter { candidate ->
+            candidate.matched == null &&
+                candidate.text !in onlineMeaningCache &&
+                candidate.text !in _ui.value.onlineLoading
+        }
+        if (missing.isEmpty()) return
+        _ui.update { state ->
+            state.copy(onlineLoading = state.onlineLoading + missing.map { it.text }.toSet())
+        }
+        missing.forEach { candidate -> lookupOnline(candidate.text) }
     }
 
     /** 单个未收录词联网查释义；结果（含空）写入缓存并刷新 UI */
@@ -199,6 +245,8 @@ class AddWordViewModel @Inject constructor(
     }
 
     fun toggleSelect(text: String) {
+        // 已在我要背的词不可勾选（避免重复添加，用户 2026-09-10）
+        if (text in _ui.value.inMine) return
         _ui.update { state ->
             state.copy(
                 selected = if (text in state.selected) state.selected - text else state.selected + text,
@@ -206,8 +254,31 @@ class AddWordViewModel @Inject constructor(
         }
     }
 
+    /** 忽略伪词（date/sun 等）：持久化 + 移出候选，Snackbar 可撤销 */
+    fun ignoreWord(text: String) {
+        viewModelScope.launch { settingsRepository.addOcrIgnoredWord(text) }
+        _ui.update { state ->
+            state.copy(
+                candidates = state.candidates.filterNot { it.text == text },
+                selected = state.selected - text,
+                ignoredWord = text,
+            )
+        }
+    }
+
+    /** 撤销忽略：恢复持久化，并在冻结的照片结果里恢复该词 */
+    fun unignoreWord(text: String) {
+        viewModelScope.launch { settingsRepository.removeOcrIgnoredWord(text) }
+        if (lastPhotoRaw.isNotBlank()) onPhotoText(lastPhotoRaw)
+    }
+
+    fun consumeIgnoredWord() {
+        _ui.update { it.copy(ignoredWord = null) }
+    }
+
     fun addSelected() {
-        val selected = _ui.value.selected.toList()
+        // 已在我要背的词不重复提交（双保险）
+        val selected = _ui.value.selected.filterNot { it in _ui.value.inMine }
         if (selected.isEmpty()) return
         addWords(selected)
     }
@@ -221,6 +292,7 @@ class AddWordViewModel @Inject constructor(
                     adding = false,
                     selected = emptySet(),
                     candidates = state.candidates.filterNot { it.text in words },
+                    inMine = state.inMine + words.toSet(),
                     result = result,
                 )
             }

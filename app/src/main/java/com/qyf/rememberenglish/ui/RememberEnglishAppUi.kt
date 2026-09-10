@@ -1,6 +1,9 @@
 package com.qyf.rememberenglish.ui
 
 import android.content.Intent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -74,6 +77,11 @@ fun RememberEnglishAppUi(
             navController = navController,
             startDestination = Route.TODAY,
             modifier = Modifier.padding(padding),
+            // 默认 ~700ms 渐隐太慢（用户 2026-09-10 反馈卡顿），统一改为快速淡入淡出
+            enterTransition = { fadeIn(tween(180)) },
+            exitTransition = { fadeOut(tween(120)) },
+            popEnterTransition = { fadeIn(tween(180)) },
+            popExitTransition = { fadeOut(tween(120)) },
         ) {
             composable(
                 Route.TODAY,

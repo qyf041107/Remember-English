@@ -64,8 +64,9 @@
 - 常量集中在 `domain/srs/ScoreScheduler.kt` 的 `ScoreConstants`，禁止散落魔法数字
 
 ### 提醒机制
-- WorkManager 周期任务（unique "daily_reminder"、`ExistingPeriodicWorkPolicy.UPDATE`、初始延迟对齐提醒时间，默认 20:00 可设置）；不用 AlarmManager 精确闹钟
-- 触发时检查完成度：未完成 → IMPORTANCE_HIGH 渠道（remind_urgent）heads-up 通知（今日已背会/目标/还差数）；已完成或 `lastNotifiedDay == 今天` → 静默
+- WorkManager 周期任务（unique "daily_reminder"、`ExistingPeriodicWorkPolicy.UPDATE`、初始延迟对齐提醒时间，默认 20:00 可设置）；不用 AlarmManager 精确闹钟（用户 2026-09-10 确认维持，只加引导页方案）
+- 触发时检查完成度：未完成 → IMPORTANCE_HIGH 渠道（remind_urgent）heads-up 通知（今日已背会/目标/还差数 + 进度条 + "去背单词"快捷按钮）；已完成或 `lastNotifiedDay == 今天` → 静默
+- **可靠性引导**（我的页，用户 2026-09-10 反馈清后台收不到提醒）：提醒卡内引导块——① 允许自启动（MIUI 深链 `com.miui.securitycenter/...AutoStartManagementActivity`，失败回退应用详情）② 省电策略无限制 ③ 允许悬浮通知（跳 remind_urgent 渠道设置）；各厂商"灵动岛/焦点通知"无公开第三方 API，不做适配
 - 点击 deep link 直达学习页；Android 13+ `POST_NOTIFICATIONS` 运行时申请，拒绝后引导跳系统设置
 
 ### OCR 扫词（"实时显示单词意思"；用户 2026-09-08 重构交互）
@@ -77,13 +78,17 @@
 - 候选词排序（用户 2026-09-07 要求按考频优先）：有真题词频的按词频降序在前 → 词库命中但无词频 → 未命中的自定义词；组内保持画面出现顺序
 - 提取（`domain/ocr/WordExtractor.kt` 纯 Kotlin）：正则 `[A-Za-z][A-Za-z'-]+` → 小写 → 滤单字符/含数字/含空格 → 保序去重
 - 命中词库/词组显示释义；未命中 → 自定义词（source=1）。拍照/相册/实时流走同一解析管线
-- **拍照候选联网释义**（用户 2026-09-08 要求）：拍照/相册/云端静态识别结果中未收录的词，自动调有道 jsonapi 查释义显示在候选行（并发限 4、会话内缓存、查不到也缓存防重查；标签"在线"）；词仍按自定义词入库。**实时流不做联网查询**（避免逐帧刷请求）
+- **候选联网释义**（用户 2026-09-08 要求；2026-09-10 扩展到实时流）：拍照/相册/云端/实时流中未收录的词，识别出即自动调有道 jsonapi 查释义显示在候选行（并发限 4、会话内缓存、查不到也缓存防重查，逐词只查一次防逐帧刷请求；标签"在线"）；词仍按自定义词入库
+- **忽略伪词**（用户 2026-09-10，date/sun 每次 OCR 都出现）：候选行尾 ✕ 忽略，DataStore `ocr_ignored_words` 持久化，Snackbar 可撤销；不做词黑名单与管理 UI
+- **已添加标注**（用户 2026-09-10）：候选行尾"已添加"（tertiary 色）标注已在我要背的词且不可勾选（`UserWordDao.findMineWords` JOIN 查询，会话内每词只查一次）；加词成功后候选移除
+- **有道解析**（2026-09-10 实测接口结构变更）：`ec.word[k].trs[].tr[].l.i[]` 新结构为主 → 兼容旧 `ec.trs`（`tr.tr[].line`）→ `fanyi` → `web_trans` 同 key 网络释义兜底；样本固化在 `OnlineDictClientTest`
 
 ### 词库搜索（用户 2026-09-08 要求）
 - **模糊匹配**（`domain/search/FuzzyMatcher.kt` 纯 Kotlin，全量 ~6700 词逐词打分）：精确 > 前缀 > 包含 > 编辑距离 ≤2（≤3 字母词容 1），同档内按真题词频降序；输错几个字母也能搜到，最佳匹配置顶
 - **变形词与原形**：查 `word_forms.json`，搜到的变形词结果上方附带原形词条（note "「went」的原形"）
 - **一键清空**：搜索框右侧小叉
-- **联网查词兜底**（`data/online/OnlineDictClient.kt`，用户 2026-09-08 批准）：本地词库+词组无结果时，延迟 250ms 防抖后调用有道 jsonapi（HttpURLConnection，无新依赖，5s 超时），结果区显示释义并可加入"我要背"（入库为自定义词 source=1）
+- **联网查词兜底**（`data/online/OnlineDictClient.kt`，用户 2026-09-08 批准）：本地词库+词组**无精确匹配**时（2026-09-10 扩展触发条件，模糊近似命中也联网），延迟 250ms 防抖后调用有道 jsonapi（HttpURLConnection，无新依赖，5s 超时），在线结果**置顶**显示并可加入"我要背"（入库为自定义词 source=1）
+- **导航过渡**（用户 2026-09-10 反馈默认 ~700ms 渐隐太慢）：NavHost 统一 fadeIn(tween(180)) / fadeOut(tween(120)) 四向过渡（`RememberEnglishAppUi.kt`）
 
 ## 六、里程碑验收清单（完成打勾）
 
