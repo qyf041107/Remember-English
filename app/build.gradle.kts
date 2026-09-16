@@ -15,8 +15,10 @@ android {
         applicationId = "com.qyf.rememberenglish"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // versionName 与即将推送的 git tag 对齐；versionCode 每次发版递增（此前一直停留在 1，
+        // 导致已发布的 v1.0.1/v1.0.2 APK 版本号显示为 0.1.0）
+        versionCode = 3
+        versionName = "1.0.3"
     }
 
     buildTypes {

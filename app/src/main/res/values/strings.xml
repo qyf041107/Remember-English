@@ -140,6 +140,11 @@
     <string name="profile_cloud_save">保存密钥</string>
     <string name="profile_cloud_help">获取方式：cloud.baidu.com 注册并实名认证 → 控制台搜索"文字识别"创建应用 → 复制 API Key 与 Secret Key 填入上方保存。密钥仅存本机，不会上传。个人认证每月有免费调用额度。</string>
     <string name="profile_word_manage">生词管理</string>
+    <string name="profile_voice">语音打开</string>
+    <string name="profile_voice_desc">小爱同学说"打开记英语"常常听不准——它对"打开X"只按应用名匹配，第三方应用没有接口能注册语音别名或触发词，只能在系统/小爱侧配置。最可靠的办法：小爱同学里发"训练小爱"或进"自定义指令"，触发词填"背单词"，动作选"打开链接"，粘贴下面这串地址。</string>
+    <string name="profile_voice_open_assistant">① 打开小爱同学</string>
+    <string name="profile_voice_copy_link">② 复制快捷方式</string>
+    <string name="profile_voice_copied">已复制，粘贴到小爱同学自定义指令的"打开链接"里</string>
     <string name="profile_about">关于</string>
     <string name="profile_about_body">记英语 —— 简约的考研背单词应用。\n词库来源：qwerty-learner（GPL-3.0）。\n词组释义来源：ECDICT（MIT）。\n真题词频来源：NETEMVocabulary（CC BY-NC-SA 4.0）。\n本地词库未收录时自动联网查询（有道词典公开接口）。</string>
 </resources>

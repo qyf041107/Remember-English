@@ -115,7 +115,10 @@ fun RememberEnglishAppUi(
             ) {
                 WordStudyScreen(onBack = { navController.popBackStack() })
             }
-            composable(Route.ADD_WORD) {
+            composable(
+                Route.ADD_WORD,
+                deepLinks = listOf(navDeepLink { uriPattern = "rememberenglish://add" }),
+            ) {
                 AddWordScreen(onDone = { navController.popBackStack() })
             }
         }

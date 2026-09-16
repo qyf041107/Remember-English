@@ -14,6 +14,7 @@
 ## 二、范围边界
 
 - **离线优先**：无后端、无账号，词库/词频/词形/词组全部打包进 assets；联网仅**三处**：① **联网查词兜底**——本地词库+词组未收录时调用有道公开接口（jsonapi，无 key），用户 2026-09-08 批准；② **云端手写识别（可选）**——拍照/相册静态图调百度智能云手写文字识别（`data/online/BaiduHandwritingClient.kt`），密钥由用户在"我的"页填入、DataStore 本地存储**不入仓库**，失败自动回退本地 ML Kit，用户 2026-09-08 批准；③ **联网拼写纠错**——本地与联网精确查**都失败**时调有道拼写建议（`data/online/SpellSuggestClient.kt`，无 key），用户 2026-09-16 批准；其余任何网络请求均不允许（INTERNET 权限已声明）
+- **语音助手"打开应用"不做适配**（用户 2026-09-16 反馈"小爱同学唤不出"）：小爱同学对"打开X"**只做应用名匹配**，第三方应用**没有任何公开 API** 能注册读音别名、语音触发词或 App Actions（`res/xml/shortcuts.xml` + `android.app.shortcuts` 属 Google Assistant 体系，国行 HyperOS 不消费它）。故**不写**这类看起来能修实则无效的配置，只在 App 侧提供两样东西：① 两个 deep link（`rememberenglish://study` / `rememberenglish://add`）② "我的 → 语音打开"引导卡（一键打开小爱同学，`getLaunchIntentForPackage` 取启动 Intent 不硬编码 Activity 名；一键复制 deep link 供用户在小爱里建自定义指令）。这是唯一可靠路径，属平台限制而非配置问题
 - UI 文案一律**中文**；界面克制：Material3 默认组件，不加装饰性图片/动画
 - 技术栈（已与用户确认）：Kotlin + Jetpack Compose、ML Kit 离线 OCR、三键分数模型（用户 2026-09-07 由 SM-2 SRS 改定）、开源词库打包
 
@@ -33,6 +34,8 @@
 | CameraX | 1.4.1 |
 | ML Kit text-recognition（离线拉丁模型） | 16.0.1 |
 | Hilt | 2.52 |
+
+**版本号约定**：`versionName` 与即将推送的 git tag 一致（当前 `1.0.3`），`versionCode` 每次发版递增（当前 3）。此前两者长期停留在 `0.1.0`/`1`，导致 v1.0.1、v1.0.2 的 APK 安装后显示的版本号是 0.1.0——发版前记得同步改。CI 只按 tag 出 Release，不注入版本号，故只能手改。
 
 ## 四、代码结构约定
 

@@ -28,12 +28,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- 通知点击 deep link：rememberenglish://study -->
+            <!-- deep link：rememberenglish://study（通知点击）与 rememberenglish://add（语音/快捷方式）；
+                 同一 intent-filter 内多个 <data> 之间是"或"关系 -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="rememberenglish" android:host="study" />
+                <data android:scheme="rememberenglish" android:host="add" />
             </intent-filter>
         </activity>
 

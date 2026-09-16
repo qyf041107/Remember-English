@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -42,8 +43,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
@@ -249,6 +252,14 @@ fun ProfileScreen(
             }
         }
 
+        SectionTitle(stringResource(R.string.profile_voice))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            VoiceOpenGuideBlock()
+        }
+
         SectionTitle(stringResource(R.string.profile_about))
         Text(
             text = stringResource(R.string.profile_about_body),
@@ -278,6 +289,65 @@ fun ProfileScreen(
             text = { TimePicker(state = timeState) },
         )
     }
+}
+
+/**
+ * 语音打开引导（用户 2026-09-16 反馈"小爱同学唤不出应用"）。
+ *
+ * 结论：**App 侧无法解决**。小爱同学对"打开X"只做应用名匹配，第三方应用没有任何公开 API
+ * 能注册读音别名、语音触发词或 App Actions（`res/xml/shortcuts.xml` + `android.app.shortcuts`
+ * 是给 Google Assistant 用的，国行 HyperOS 不消费它）。所以这里不写任何"看起来能修"的配置，
+ * 只给唯一可靠的路子：在小爱同学里建一条自定义指令，动作指向本应用的 deep link。
+ */
+@Composable
+private fun VoiceOpenGuideBlock() {
+    // 与小爱同学自定义指令里"打开链接"要粘贴的内容保持一致
+    val deepLink = "rememberenglish://study"
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(
+            text = stringResource(R.string.profile_voice_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = deepLink,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Row {
+            TextButton(onClick = { openVoiceAssistant(context) }) {
+                Text(stringResource(R.string.profile_voice_open_assistant))
+            }
+            TextButton(
+                onClick = {
+                    clipboard.setText(AnnotatedString(deepLink))
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.profile_voice_copied),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                },
+            ) {
+                Text(stringResource(R.string.profile_voice_copy_link))
+            }
+        }
+    }
+}
+
+/** 小爱同学包名（小米）。非小米设备取不到启动 Intent，走回退分支 */
+private const val VOICE_ASSIST_PACKAGE = "com.miui.voiceassist"
+
+/** 小爱同学；用 getLaunchIntentForPackage 取启动 Intent，不硬编码 Activity 类名（随版本会变） */
+private fun openVoiceAssistant(context: android.content.Context) {
+    val intent = context.packageManager.getLaunchIntentForPackage(VOICE_ASSIST_PACKAGE)
+    val started = intent?.let {
+        runCatching { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+    } ?: false
+    // 没装小爱（非小米设备）或跳转失败 → 回退应用详情，不做死路
+    if (!started) openAppDetailsSettings(context)
 }
 
 /** 提醒可靠性引导：自启动 / 省电策略 / 悬浮通知（HyperOS 清后台会拦提醒，用户 2026-09-10） */
