@@ -37,19 +37,35 @@ jobs:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
-      - name: 生成 Release 更新日志（取自标签附注）
+      - name: 生成 Release 更新日志（取自 README 对应版本段落）
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          git tag -l --format='%(contents)' "${GITHUB_REF_NAME}" > release_notes.txt
-          # 标签没有附注时退回默认说明
-          if [ ! -s release_notes.txt ]; then
-            cat > release_notes.txt <<EOF
-          记英语 ${GITHUB_REF_NAME}
+          TAG="${GITHUB_REF_NAME}"
+          # 从 README 的「更新日志」里抽出本版本段落（### vX.Y.Z 到下一条 ### 之间）。
+          # 为什么不读标签附注：checkout 常把标签取成轻量引用，此时
+          # `git tag --format='%(contents)'` 会落到提交对象上、取到的是**提交信息**而不是附注
+          # （曾因此在 v1.0.3 的 Release 正文里贴出了一句无关的提交信息）。
+          # README 是更新日志的唯一数据源，本地就能验证，不依赖 git 对象细节。
+          awk -v tag="$TAG" '
+            !found && substr($0, 1, 4) == "### " && substr($0, 5, length(tag)) == tag { found = 1; next }
+            found && substr($0, 1, 4) == "### " { exit }
+            found { print }
+          ' README.md > release_notes.txt
 
-          下载 app-debug.apk 安装（需要在手机上允许"安装未知来源应用"）。
-          调试签名，个人使用无影响；更新版本直接覆盖安装。
-          EOF
+          if [ ! -s release_notes.txt ]; then
+            echo "::warning::README 里没找到 ${TAG} 的更新日志段落，正文将只有默认说明"
+            printf '记英语 %s\n' "$TAG" > release_notes.txt
           fi
+
+          cat >> release_notes.txt <<'EOF'
+
+          ---
+          下载 app-debug.apk 安装（需要在手机上允许"安装未知来源应用"）。
+          调试签名，个人使用无影响；更新版本直接覆盖安装，背词记录与设置都会保留。
+          EOF
+
+          echo "--- release_notes.txt ---"
+          cat release_notes.txt
 
       - name: 发布 Release（仅 v* 标签触发）
         if: startsWith(github.ref, 'refs/tags/')
