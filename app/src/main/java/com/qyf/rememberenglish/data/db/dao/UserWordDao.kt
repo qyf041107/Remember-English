@@ -26,9 +26,9 @@ interface UserWordDao {
     @Query("SELECT * FROM user_word WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): UserWordEntity?
 
-    /** 我要背全量列表（新添加在前） */
+    /** 我要背全量列表（用户 2026-09-16 指定：**新添加的在前**） */
     @Transaction
-    @Query("SELECT * FROM user_word WHERE isSuspended = 0 ORDER BY addedAt ASC")
+    @Query("SELECT * FROM user_word WHERE isSuspended = 0 ORDER BY addedAt DESC")
     fun observeAllWithWord(): Flow<List<UserWordWithWord>>
 
     @Query("SELECT wordId FROM user_word WHERE isSuspended = 0")

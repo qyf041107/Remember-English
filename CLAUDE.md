@@ -15,7 +15,7 @@
 
 - **离线优先**：无后端、无账号，词库/词频/词形/词组全部打包进 assets；联网仅**三处**：① **联网查词兜底**——本地词库+词组未收录时调用有道公开接口（jsonapi，无 key），用户 2026-09-08 批准；② **云端手写识别（可选）**——拍照/相册静态图调百度智能云手写文字识别（`data/online/BaiduHandwritingClient.kt`），密钥由用户在"我的"页填入、DataStore 本地存储**不入仓库**，失败自动回退本地 ML Kit，用户 2026-09-08 批准；③ **联网拼写纠错**——本地与联网精确查**都失败**时调有道拼写建议（`data/online/SpellSuggestClient.kt`，无 key），用户 2026-09-16 批准；其余任何网络请求均不允许（INTERNET 权限已声明）
 - **语音助手"打开应用"不做适配**（用户 2026-09-16 反馈"小爱同学唤不出"）：小爱同学对"打开X"**只做应用名匹配**，第三方应用**没有任何公开 API** 能注册读音别名、语音触发词或 App Actions（`res/xml/shortcuts.xml` + `android.app.shortcuts` 属 Google Assistant 体系，国行 HyperOS 不消费它）。故**不写**这类看起来能修实则无效的配置，只在 App 侧提供两样东西：① 两个 deep link（`rememberenglish://study` / `rememberenglish://add`）② "我的 → 语音打开"引导卡（一键打开小爱同学，`getLaunchIntentForPackage` 取启动 Intent 不硬编码 Activity 名；一键复制 deep link 供用户在小爱里建自定义指令）。这是唯一可靠路径，属平台限制而非配置问题
-- UI 文案一律**中文**；界面克制：Material3 默认组件，不加装饰性图片/动画
+- UI 文案一律**中文**；界面克制：Material3 默认组件，**不加装饰性图片/动效**。动画只服务于交互反馈与可读性（行尾按钮点击回弹、细滚动条），不做炫技动效
 - 技术栈（已与用户确认）：Kotlin + Jetpack Compose、ML Kit 离线 OCR、三键分数模型（用户 2026-09-07 由 SM-2 SRS 改定）、开源词库打包
 
 ## 三、锁定版本（升级需先修改此处并说明理由）
@@ -60,7 +60,8 @@
 
 ### 分数模型（用户 2026-09-07 定义，替代原 SM-2 SRS）
 - 三键记分：**我知道 +1 分｜不清楚 +0.5 分｜我不会 +0 分**；一单词分数 **满 5 分 = 已掌握**
-- 筛选口径（"我要背"页）：新词 = 0 分且从未作答；学习中 = 已作答但未满 5 分（含答错 0 分的）；已掌握 = ≥5 分
+- 筛选口径（"我要背"页）：新词 = 0 分且从未作答；学习中 = 已作答但未满 5 分（含答错 0 分的）；已掌握 = ≥5 分；星标 = 独立档（星标词不算已掌握，故不与"已掌握"重复）
+- **「我要背」列表排序**（用户 2026-09-16 指定）：按添加时间**倒序**，新添加的在最上面。`UserWordDao.observeAllWithWord` 原先 SQL 是 `addedAt ASC` 而注释写的是"新添加在前"——**代码与注释本就矛盾**，本轮改 `DESC` 对齐
 - **加权随机抽词**（`domain/select/StudyPicker.kt`，无固定队列）：权重 = `(1 + wrongCount + unclearCount) × (已掌握 ? 0.25 : 1)`——不会/不清楚过的词出现最勤，已掌握词 0.25 折一笔带过；尽量不与刚答过的词重复
 - **星标**（用户 2026-09-16 选定最激进口径，`UserWord.isStarred`）三条语义：① **永不算已掌握**（`isMastered = !isStarred && score >= 5`，一处改动即让"我要背"筛选/我的页统计/背诵卡显示全部跟着对）② **不计入今日背会数**（`answer_log.wasStarred` 快照过滤）③ **抽中权重 ×3 且不受 0.25 折**（`ScoreConstants.STAR_PICK_WEIGHT`，`pickWeight` 里星标判定**必须先于**已掌握判定）
   - 星标是词卡属性，故**只对已在"我要背"的词存在**。行上点星标时若词还没在"我要背"，**先自动加入再打星**（一次点击=我要死磕这个词，Snackbar 提示）；**取消星标不会移出"我要背"**（移出是左滑的职责）
@@ -89,7 +90,7 @@
 - **候选联网释义**（用户 2026-09-08 要求；2026-09-10 扩展到实时流）：拍照/相册/云端/实时流中未收录的词，识别出即自动调有道 jsonapi 查释义显示在候选行（并发限 4、会话内缓存、查不到也缓存防重查，逐词只查一次防逐帧刷请求；标签"在线"）；词仍按自定义词入库
 - **词黑名单**（用户 2026-09-10 引入为"忽略伪词"，2026-09-16 升级为正式黑名单）：候选行尾 ✕ / 词库行 ✕ 拉黑，DataStore `ocr_ignored_words` 持久化（**key 不变，改名会丢已有忽略词**），Snackbar 可撤销；黑名单同时过滤**扫词候选**与**词库搜索结果**（`WordRepository.search` 与在线兜底都查黑名单，否则词库行的"加入黑名单"看起来毫无作用）；"我的 → 生词管理 → 词黑名单"可查看与恢复
 - **行尾三件套**（用户 2026-09-16）：词库行与在线结果行统一为 **黑名单 | 星标 | 加入我要背**，同一套紧凑热区（图标 20dp、热区 34dp，`WordRow.kt` 的 `RowTailAction`），避免尺寸不一互相"打架"；扫词候选行此处没有"加入"按钮（加词走勾选+底部批量），故为 状态标注 + 黑名单 + 星标
-- **图标集**：项目只依赖 `material-icons-core`（49 个图标），**没有** `Bookmark`/`Block`/`StarBorder`/`material-icons-extended`。黑名单沿用 ✕、星标用 `Icons.Filled.Star`（实心）/`Icons.Outlined.Star`（描边）、"我要背"tab 用 `Icons.Filled.Favorite`。新增图标前先确认在核心集内，或说明引入 extended 的理由
+- **图标集**：项目只依赖 `material-icons-core`（49 个图标），**没有** `Bookmark`/`Block`/`StarBorder`/`material-icons-extended`。星标用 `Icons.Filled.Star`（实心）/`Icons.Outlined.Star`（描边）、"我要背"tab 用 `Icons.Filled.Favorite`、黑名单用**自绘矢量图** `res/drawable/ic_block.xml`（🚫 圆圈加斜杠，24dp/24 视口单 path，照 `ic_notification.xml` 的写法）；不使用彩色 emoji 字符（无法 tint，与单色图标风格打架）。新增图标前先确认在核心集内，或说明引入 extended（约 10MB）的理由
 - **已添加标注**（用户 2026-09-10）：候选行「已添加」（tertiary 色）标注已在我要背的词且不可勾选（`UserWordDao.findMineWords` JOIN 查询，会话内每词只查一次）；加词成功后候选移除
 - **有道解析**（2026-09-10 实测接口结构变更）：`ec.word[k].trs[].tr[].l.i[]` 新结构为主 → 兼容旧 `ec.trs`（`tr.tr[].line`）→ `fanyi` → `web_trans` 同 key 网络释义兜底；样本固化在 `OnlineDictClientTest`
 
@@ -106,6 +107,14 @@
   - **已知可优化**：`jsonapi` 对拼错词本身会返回 `typos.typo[]`（`word`/`trans`），用它可以省掉一次 suggest 请求。当前实现未读该字段，走的是已批准的 suggest 接口
 - **导航过渡**（用户 2026-09-10 反馈默认 ~700ms 渐隐太慢）：NavHost 统一 fadeIn(tween(180)) / fadeOut(tween(120)) 四向过渡（`RememberEnglishAppUi.kt`）
 
+### 界面通用（用户 2026-09-16）
+- **细滚动条**（`ui/components/ThinScrollbar.kt`）：所有可下拉界面右侧一条 3dp 圆角细条。Compose **没有**现成滚动条组件（material3/foundation 均无），故自绘
+  - 实现为 **Modifier 扩展** `Modifier.thinScrollbar(state)`，内部用 `drawWithContent` **在绘制阶段才读滚动状态**——滚动只触发重绘、不触发整屏重组；也因此不必给现有界面加一层 Box 缩进
+  - 两个重载：`ScrollState`（`Column`+`verticalScroll`，视口高取 `ScrollState.viewportSize`，1.7.6 已有该公开 API）与 `LazyListState`（懒列表拿不到内容总高度，用"可见条目数 / 总条目数"近似；本项目行高接近一致，误差可忽略）
+  - **颜色不硬编码两套 RGB**：取 `MaterialTheme.colorScheme.onSurfaceVariant` + 透明度。App 的深色模式是**换主题**，主题色会自动跟着切，任何主题调整下都协调；写死颜色反而会在以后改主题时脱节
+  - 使用时放在 `.padding(...)` **之前**（更靠近滚动容器），滚动条才贴容器右缘；横向的 `LazyRow`（我要背筛选 chips）不加
+- **行尾按钮点击动画**（`ui/components/WordRow.kt` 的 `RowTailAction`，用户 2026-09-16 要求仿 B 站点赞/投币/收藏）：点击时缩放 `1.0 → 1.35 → 1.0`、用 `spring(DampingRatioMediumBouncy)` 回弹过冲；tint 另走 `animateColorAsState` 平滑过渡（描边星↔实心星、+↔✓ 不硬切）。全部 11 个调用点共用这一个组件，改一处即全覆盖
+
 ## 六、里程碑验收清单（完成打勾）
 
 - [ ] M0 环境搭建：SDK（platform-35 / build-tools 35.0.0 / platform-tools）装齐，gradle wrapper 可用
@@ -117,6 +126,7 @@
 - [ ] M4 OCR：WordExtractorTest 全绿；真机对书本实时识别出词并加入"我要背"
 - [ ] M5 发布：`gradlew build` 全量通过；深色主题/空态/图标；**用户检阅通过后** commit + push（push 前须再次确认）
 - [ ] M6 第四轮反馈（2026-09-16）：① 词黑名单（升级自"忽略"，词库行也能拉黑 + 我的页管理入口可恢复）② 词库在线结果可点开详情 ③ 星标（永不算已掌握 / 不计入今日背会 / 权重 ×3；未入库时点星标=自动加入）④ 行尾统一三件套（黑名单|星标|加入）⑤ 小爱同学（结论：**平台限制，App 侧无法注册语音别名**，只做引导）⑥ 联网搜索纠错
+- [ ] M7 第五轮打磨（2026-09-16）：① 我要背列表改倒序（新添加在前）② 所有可下拉界面加细滚动条（含扫词候选面板，深浅色自动适配）③ 黑名单图标改 🚫（自绘矢量图）④ 行尾三个按钮加点击回弹动画
 
 ## 七、构建与验证命令
 

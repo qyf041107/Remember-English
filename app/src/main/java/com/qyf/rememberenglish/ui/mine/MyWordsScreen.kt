@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -44,6 +45,7 @@ import com.qyf.rememberenglish.R
 import com.qyf.rememberenglish.domain.srs.ScoreConstants
 import com.qyf.rememberenglish.ui.components.RowTailAction
 import com.qyf.rememberenglish.ui.components.WordRow
+import com.qyf.rememberenglish.ui.components.thinScrollbar
 
 /**
  * 我要背：统计头 + 分数筛选 chips + 列表 + 右下 FAB 进扫词添加。
@@ -122,7 +124,11 @@ fun MyWordsScreen(
                     )
                 }
             } else {
-                LazyColumn {
+                val listState = rememberLazyListState()
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.thinScrollbar(listState),
+                ) {
                     items(state.items, key = { it.first.id }) { (word, userWord) ->
                         SwipeToRemoveRow(
                             wordId = word.id,

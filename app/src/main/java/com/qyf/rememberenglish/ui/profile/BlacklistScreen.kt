@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
@@ -38,6 +39,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qyf.rememberenglish.R
 import com.qyf.rememberenglish.ui.components.RowTailAction
+import com.qyf.rememberenglish.ui.components.thinScrollbar
 
 /** 词黑名单管理：查看与恢复被拉黑的词（用户 2026-09-16） */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -101,7 +103,11 @@ fun BlacklistScreen(
                     )
                 }
             } else {
-                LazyColumn {
+                val listState = rememberLazyListState()
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.thinScrollbar(listState),
+                ) {
                     items(state.words, key = { it.word }) { item ->
                         Row(
                             modifier = Modifier

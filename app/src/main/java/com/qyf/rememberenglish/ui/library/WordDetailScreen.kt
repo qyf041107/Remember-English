@@ -31,6 +31,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qyf.rememberenglish.R
 import com.qyf.rememberenglish.domain.model.Word
+import com.qyf.rememberenglish.ui.components.thinScrollbar
 
 /** 词详情：单词/音标/释义/发音 + 加入或移出我要背 */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -101,9 +102,11 @@ private fun WordDetailContent(
     onToggleMine: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val scrollState = rememberScrollState()
     Column(
         modifier = modifier
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
+            .thinScrollbar(scrollState)
             .padding(horizontal = 20.dp),
     ) {
         Spacer(modifier = Modifier.height(16.dp))

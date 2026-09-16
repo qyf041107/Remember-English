@@ -1,5 +1,9 @@
 package com.qyf.rememberenglish.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,23 +18,28 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.qyf.rememberenglish.R
 import com.qyf.rememberenglish.domain.model.Word
+import kotlinx.coroutines.launch
 
 /**
  * 词库/列表通用行：单词 + 音标 + 首条释义 + 行尾操作。
@@ -94,7 +103,7 @@ fun WordRow(
             // 黑名单：拉黑后不再出现在扫词候选与词库搜索（"我的 → 词黑名单"可恢复）
             onBlacklist?.let { onBlacklistClick ->
                 RowTailAction(
-                    icon = Icons.Filled.Close,
+                    icon = ImageVector.vectorResource(R.drawable.ic_block),
                     contentDescription = stringResource(R.string.add_blacklist),
                     onClick = onBlacklistClick,
                 )
@@ -124,7 +133,13 @@ fun WordRow(
     }
 }
 
-/** 行尾操作图标：统一 20dp 图标 + 34dp 热区，三个并排尺寸一致（在线结果行也复用） */
+/**
+ * 行尾操作图标：统一 20dp 图标 + 34dp 热区，三个并排尺寸一致（在线结果行/拼写建议行/黑名单行都复用）。
+ *
+ * 点击动画（用户 2026-09-16 要求，仿 B 站点赞投币收藏的弹跳感）：
+ * 先弹大到 1.35 再用回弹弹簧落回 1.0，过冲带来"点到了"的手感；
+ * 颜色另走 [animateColorAsState]，让描边星↔实心星、+↔✓ 平滑过渡而不是硬切。
+ */
 @Composable
 internal fun RowTailAction(
     icon: ImageVector,
@@ -133,18 +148,42 @@ internal fun RowTailAction(
     tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     enabled: Boolean = true,
 ) {
+    val scope = rememberCoroutineScope()
+    val scale = remember { Animatable(1f) }
+    val animatedTint by animateColorAsState(targetValue = tint, label = "rowTailTint")
+
     Box(
         modifier = Modifier
             .size(34.dp)
             .clip(CircleShape)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled) {
+                onClick()
+                scope.launch {
+                    scale.animateTo(
+                        targetValue = 1.35f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessHigh,
+                        ),
+                    )
+                    scale.animateTo(
+                        targetValue = 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                    )
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = tint,
-            modifier = Modifier.size(20.dp),
+            tint = animatedTint,
+            modifier = Modifier
+                .size(20.dp)
+                .scale(scale.value),
         )
     }
 }

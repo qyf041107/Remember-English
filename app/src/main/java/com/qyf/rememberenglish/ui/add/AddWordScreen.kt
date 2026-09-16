@@ -24,13 +24,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
@@ -49,7 +49,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,6 +59,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qyf.rememberenglish.R
+import com.qyf.rememberenglish.ui.components.thinScrollbar
 import com.qyf.rememberenglish.data.ocr.PhotoDecoder
 
 /** 扫词添加：全屏实时取景识别 + 候选词实时释义 + 勾选批量加入 + 拍照/相册（手写词录入） */
@@ -255,8 +258,12 @@ fun AddWordScreen(
                         .navigationBarsPadding()
                         .padding(top = 8.dp, bottom = 8.dp),
                 ) {
+                    val listState = rememberLazyListState()
                     LazyColumn(
-                        modifier = Modifier.weight(1f, fill = false),
+                        state = listState,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .thinScrollbar(listState),
                     ) {
                         if (state.candidates.isEmpty()) {
                             item {
@@ -460,9 +467,9 @@ private fun CandidateRow(
         }
         Spacer(modifier = Modifier.size(4.dp))
         // 词黑名单（原"忽略"，用户 2026-09-16 升级）：拉黑后不再出现在扫词候选与词库搜索，
-        // 可在"我的 → 词黑名单"恢复。图标沿用 ✕ 以免引入 material-icons-extended。
+        // 可在"我的 → 词黑名单"恢复。图标为自绘的 🚫 矢量图（不引入 material-icons-extended）。
         Icon(
-            imageVector = Icons.Filled.Close,
+            imageVector = ImageVector.vectorResource(R.drawable.ic_block),
             contentDescription = stringResource(R.string.add_blacklist),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier

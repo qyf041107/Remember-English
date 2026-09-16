@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -36,8 +37,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -46,6 +49,7 @@ import com.qyf.rememberenglish.R
 import com.qyf.rememberenglish.data.online.OnlineWord
 import com.qyf.rememberenglish.data.repository.SearchHit
 import com.qyf.rememberenglish.ui.components.RowTailAction
+import com.qyf.rememberenglish.ui.components.thinScrollbar
 import com.qyf.rememberenglish.ui.components.WordRow
 
 /**
@@ -60,6 +64,8 @@ fun LibraryScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    // 三个结果分支互斥，共用同一份滚动状态即可（细滚动条见下）
+    val resultsState = rememberLazyListState()
 
     // 拉黑（用户 2026-09-16）：Snackbar 可撤销
     LaunchedEffect(state.blacklistedWord) {
@@ -107,7 +113,10 @@ fun LibraryScreen(
 
             when {
                 state.query.isBlank() -> EmptyHint(stringResource(R.string.library_search_empty))
-                state.results.isNotEmpty() -> LazyColumn {
+                state.results.isNotEmpty() -> LazyColumn(
+                    state = resultsState,
+                    modifier = Modifier.thinScrollbar(resultsState),
+                ) {
                     // 查询词本身被拉黑：只提示一句，不能把 they/their/there 这些模糊结果一起吞掉
                     if (state.queryBlacklisted) {
                         item(key = "blacklisted-note") {
@@ -192,7 +201,10 @@ fun LibraryScreen(
                         )
                     }
                 }
-                state.online is OnlineLookupState.Found -> LazyColumn {
+                state.online is OnlineLookupState.Found -> LazyColumn(
+                    state = resultsState,
+                    modifier = Modifier.thinScrollbar(resultsState),
+                ) {
                     item {
                         OnlineResultContent(
                             online = (state.online as OnlineLookupState.Found).word,
@@ -206,7 +218,10 @@ fun LibraryScreen(
                     }
                 }
                 // 拼错了：本地与联网精确查都没结果，给出纠错建议（用户 2026-09-16）
-                state.online is OnlineLookupState.Suggestions -> LazyColumn {
+                state.online is OnlineLookupState.Suggestions -> LazyColumn(
+                    state = resultsState,
+                    modifier = Modifier.thinScrollbar(resultsState),
+                ) {
                     item {
                         SuggestionContent(
                             suggestions = state.online as OnlineLookupState.Suggestions,
@@ -291,7 +306,7 @@ private fun OnlineResultContent(
                 }
             }
             RowTailAction(
-                icon = Icons.Filled.Close,
+                icon = ImageVector.vectorResource(R.drawable.ic_block),
                 contentDescription = stringResource(R.string.add_blacklist),
                 onClick = onBlacklist,
             )
