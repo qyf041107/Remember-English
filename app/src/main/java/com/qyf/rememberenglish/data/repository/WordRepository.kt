@@ -113,6 +113,26 @@ class WordRepository @Inject constructor(
         userWordDao.deleteByWordId(wordId)
     }
 
+    /**
+     * 加入 / 取消加入切换（用户 2026-09-16：词库里误点了 + 要能再点一次撤回）。
+     * @return 操作后是否在"我要背"。
+     * 取消走既有删除语义，该词的分数/错记/星标会一并清除——用户已确认只用它撤销"刚误加"。
+     */
+    suspend fun toggleMine(wordId: Long): Boolean =
+        if (addToMine(wordId)) {
+            true
+        } else {
+            removeFromMine(wordId)
+            false
+        }
+
+    /** 按单词文本切换（在线结果行/拼写建议行用；未收录时先建自定义词再切换） */
+    suspend fun toggleMineByText(word: String): Boolean {
+        val normalized = word.trim().lowercase()
+        val target = dictWordDao.findByWord(normalized)?.toWord() ?: ensureCustomWord(normalized)
+        return toggleMine(target.id)
+    }
+
     /** 左滑移出的撤销：按原样恢复词卡（保留分数与错记数） */
     suspend fun restoreUserWord(userWord: UserWord) {
         userWordDao.insert(userWord.toEntity())

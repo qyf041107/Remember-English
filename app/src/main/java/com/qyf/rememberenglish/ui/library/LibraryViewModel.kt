@@ -99,12 +99,14 @@ class LibraryViewModel @Inject constructor(
     private val searchOutcome = combine(query.debounce(250).distinctUntilChanged(), refreshTick) { q, _ -> q }
         .flatMapLatest { q ->
             if (q.isBlank()) {
-                flags.update { it.copy(queryBlacklisted = false, onlineAdded = false, onlineStarred = false) }
+                flags.update { it.copy(queryBlacklisted = false).clearedOnlineMarks() }
                 flowOf(SearchOutcome(emptyList(), OnlineLookupState.Idle))
             } else {
                 flow {
                     emit(SearchOutcome(emptyList(), OnlineLookupState.Loading))
-                    flags.update { it.copy(onlineAdded = false, onlineStarred = false) }
+                    // 一次搜索开始：把四类标记**全部**重建（此前只清 online 两项，
+                    // 导致 suggestion 的 ✓/★ 跨查询残留，搜完一个词再搜另一个会凭空显示）
+                    flags.update { it.copy(queryBlacklisted = false).clearedOnlineMarks() }
                     val hits = wordRepository.search(q)
                     val normalized = q.trim().lowercase()
                     // 黑名单词不再从联网"溜回来"，否则词库行的"加入黑名单"看起来毫无作用（用户 2026-09-16）
@@ -122,10 +124,47 @@ class LibraryViewModel @Inject constructor(
                     } else {
                         OnlineLookupState.Idle
                     }
+                    // 标记必须从库里读，不能靠本地标志（用户 2026-09-16 实测踩到）：
+                    // 本地搜索只查 source IN (0,2)，**不含自定义词**，所以"当年从在线结果加入过、
+                    // 已有分数"的词再搜时，在线行会错误显示 + ——照旧逻辑点 + 再点 ✓ 就删掉了有分数的词卡。
+                    backfillMineMarks(online)
                     emit(SearchOutcome(hits, online))
                 }
             }
         }
+
+    /** 清掉四条"已加入/已星标"标记（在线行 + 拼写建议行） */
+    private fun Flags.clearedOnlineMarks() = copy(
+        onlineAdded = false,
+        onlineStarred = false,
+        suggestionAdded = emptySet(),
+        suggestionStarred = emptySet(),
+    )
+
+    /** 按**单词文本**回填"已加入/已星标"（在线词此时可能还没进 dict_word，拿不到 wordId，只能按文本查） */
+    private suspend fun backfillMineMarks(online: OnlineLookupState) {
+        when (online) {
+            is OnlineLookupState.Found -> {
+                val word = listOf(online.word.word)
+                flags.update {
+                    it.copy(
+                        onlineAdded = wordRepository.findMineWords(word).isNotEmpty(),
+                        onlineStarred = wordRepository.findStarredWords(word).isNotEmpty(),
+                    )
+                }
+            }
+            is OnlineLookupState.Suggestions -> {
+                val words = online.words.map { it.word }
+                flags.update {
+                    it.copy(
+                        suggestionAdded = wordRepository.findMineWords(words),
+                        suggestionStarred = wordRepository.findStarredWords(words),
+                    )
+                }
+            }
+            else -> Unit
+        }
+    }
 
     private val inMineIds = wordRepository.observeMyWords()
         .map { items -> items.map { it.word.id }.toSet() }
@@ -160,8 +199,12 @@ class LibraryViewModel @Inject constructor(
         query.value = value
     }
 
-    fun addToMine(wordId: Long) {
-        viewModelScope.launch { wordRepository.addToMine(wordId) }
+    /**
+     * 加入 / 取消加入（用户 2026-09-16：词库里误点了 + 要能再点一次撤回）。
+     * 取消走既有删除语义，会连分数与星标一起清掉——用户已确认只用它撤销"刚误加"。
+     */
+    fun toggleMine(wordId: Long) {
+        viewModelScope.launch { wordRepository.toggleMine(wordId) }
     }
 
     /** 词库行星标切换：未加入"我要背"时先自动加入再打星（用户 2026-09-16） */
@@ -217,6 +260,32 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    /** 在线结果行：加入 / 取消加入切换 */
+    fun toggleOnlineMine() {
+        val online = currentOnlineWord() ?: return
+        viewModelScope.launch {
+            val wordId = ensureOnlineWord(online)
+            val nowInMine = wordRepository.toggleMine(wordId)
+            flags.update { it.copy(onlineAdded = nowInMine) }
+        }
+    }
+
+    /** 拼写建议行：加入 / 取消加入切换 */
+    fun toggleSuggestionMine(word: String) {
+        viewModelScope.launch {
+            val nowInMine = wordRepository.toggleMineByText(word)
+            flags.update {
+                it.copy(
+                    suggestionAdded = if (nowInMine) {
+                        it.suggestionAdded + word
+                    } else {
+                        it.suggestionAdded - word
+                    },
+                )
+            }
+        }
+    }
+
     /** 在线结果星标：先落库（自定义词）再打星；未加入"我要背"时一并加入 */
     fun starOnlineWord() {
         val online = currentOnlineWord() ?: return
@@ -243,6 +312,10 @@ class LibraryViewModel @Inject constructor(
         val online = currentOnlineWord() ?: return
         viewModelScope.launch { settingsRepository.addToBlacklist(online.word) }
         flags.update { it.copy(blacklistedWord = online.word, queryBlacklisted = true) }
+        // 必须重搜才会消失（用户 2026-09-16 反馈"拉黑了还显示在上面"）：
+        // 与本地行 blacklistWord、建议行 blacklistSuggestion 保持一致——只有 refreshTick 变了
+        // 才会重跑 search()，届时 isBlacklisted 为真 → online 变 Idle → 那一行才移除。
+        refreshTick.update { it + 1 }
     }
 
     // ---- 拼写建议行（用户 2026-09-16）：与在线结果行同样的三件套 ----

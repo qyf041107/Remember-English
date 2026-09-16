@@ -46,14 +46,15 @@ import kotlinx.coroutines.launch
  *
  * 行尾统一三件套（用户 2026-09-16）：**黑名单 | 星标 | 加入我要背**，三个控件同一套紧凑热区
  * （图标 20dp、热区 34dp），避免尺寸不一互相"打架"。
- * [trailing] 非空时完全接管行尾（"我要背"列表用它放分数标签与左滑前景）。
+ * [trailing] 非空时完全接管行尾（"我要背"列表用它放分数标签与左滑前景），此时 [onToggleMine]
+ * 与 [inMine] 都不会被渲染。
  */
 @Composable
 fun WordRow(
     word: Word,
     inMine: Boolean,
     onClick: () -> Unit,
-    onAdd: () -> Unit,
+    onToggleMine: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     starred: Boolean = false,
     onStar: (() -> Unit)? = null,
@@ -119,16 +120,20 @@ fun WordRow(
                     onClick = onStarClick,
                 )
             }
-            // 加词：配色沿用用户已检阅的样子（已加入=primary 对勾）
-            RowTailAction(
-                icon = if (inMine) Icons.Filled.Check else Icons.Filled.Add,
-                contentDescription = stringResource(
-                    if (inMine) R.string.detail_in_mine else R.string.detail_not_in_mine,
-                ),
-                tint = if (inMine) MaterialTheme.colorScheme.primary else inactive,
-                enabled = !inMine,
-                onClick = onAdd,
-            )
+            // 加入/取消加入（用户 2026-09-16）：**始终可点**，再点一次即撤回误加的
+            // contentDescription 用"动作"而非"状态"——读屏时"已加入我要背"不会告诉用户点了会怎样
+            onToggleMine?.let { onToggle ->
+                RowTailAction(
+                    icon = if (inMine) Icons.Filled.Check else Icons.Filled.Add,
+                    contentDescription = stringResource(
+                        if (inMine) R.string.detail_remove else R.string.detail_not_in_mine,
+                    ),
+                    tint = if (inMine) MaterialTheme.colorScheme.primary else inactive,
+                    // 取消时先缩后回弹（读起来是"被取走"），加入时弹大过冲
+                    pressedScale = if (inMine) 0.75f else 1.35f,
+                    onClick = onToggle,
+                )
+            }
         }
     }
 }
@@ -136,9 +141,9 @@ fun WordRow(
 /**
  * 行尾操作图标：统一 20dp 图标 + 34dp 热区，三个并排尺寸一致（在线结果行/拼写建议行/黑名单行都复用）。
  *
- * 点击动画（用户 2026-09-16 要求，仿 B 站点赞投币收藏的弹跳感）：
- * 先弹大到 1.35 再用回弹弹簧落回 1.0，过冲带来"点到了"的手感；
- * 颜色另走 [animateColorAsState]，让描边星↔实心星、+↔✓ 平滑过渡而不是硬切。
+ * 点击动画（用户 2026-09-16 要求，仿 B 站点赞投币收藏的弹跳感）：先缩放到 [pressedScale]
+ * 再用回弹弹簧落回 1.0，过冲带来"点到了"的手感。加入传 1.35（弹大），取消传 0.75（先缩，
+ * 读起来是"被取走"）。颜色另走 [animateColorAsState]，让描边星↔实心星、+↔✓ 平滑过渡而不是硬切。
  */
 @Composable
 internal fun RowTailAction(
@@ -147,6 +152,8 @@ internal fun RowTailAction(
     onClick: () -> Unit,
     tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     enabled: Boolean = true,
+    /** 点击时先去到哪个缩放值：加入=弹大 1.35，取消=先缩 0.75 */
+    pressedScale: Float = 1.35f,
 ) {
     val scope = rememberCoroutineScope()
     val scale = remember { Animatable(1f) }
@@ -160,7 +167,7 @@ internal fun RowTailAction(
                 onClick()
                 scope.launch {
                     scale.animateTo(
-                        targetValue = 1.35f,
+                        targetValue = pressedScale,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessHigh,

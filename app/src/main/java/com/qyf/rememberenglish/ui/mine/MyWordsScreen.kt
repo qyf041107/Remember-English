@@ -138,7 +138,7 @@ fun MyWordsScreen(
                                 word = word,
                                 inMine = true,
                                 onClick = { onWordStudyClick(userWord.id) },
-                                onAdd = {},
+                                // 行尾由 trailing 接管（星标 + 背分），本行不渲染加词按钮
                                 trailing = {
                                     // 星标开关（用户 2026-09-16）：复用行尾图标，尺寸与词库行一致
                                     RowTailAction(

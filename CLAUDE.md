@@ -90,6 +90,9 @@
 - **候选联网释义**（用户 2026-09-08 要求；2026-09-10 扩展到实时流）：拍照/相册/云端/实时流中未收录的词，识别出即自动调有道 jsonapi 查释义显示在候选行（并发限 4、会话内缓存、查不到也缓存防重查，逐词只查一次防逐帧刷请求；标签"在线"）；词仍按自定义词入库
 - **词黑名单**（用户 2026-09-10 引入为"忽略伪词"，2026-09-16 升级为正式黑名单）：候选行尾 ✕ / 词库行 ✕ 拉黑，DataStore `ocr_ignored_words` 持久化（**key 不变，改名会丢已有忽略词**），Snackbar 可撤销；黑名单同时过滤**扫词候选**与**词库搜索结果**（`WordRepository.search` 与在线兜底都查黑名单，否则词库行的"加入黑名单"看起来毫无作用）；"我的 → 生词管理 → 词黑名单"可查看与恢复
 - **行尾三件套**（用户 2026-09-16）：词库行与在线结果行统一为 **黑名单 | 星标 | 加入我要背**，同一套紧凑热区（图标 20dp、热区 34dp，`WordRow.kt` 的 `RowTailAction`），避免尺寸不一互相"打架"；扫词候选行此处没有"加入"按钮（加词走勾选+底部批量），故为 状态标注 + 黑名单 + 星标
+- **加入/取消加入是切换**（用户 2026-09-16：词库里误点了 + 要能再点一次撤回）：加词按钮**始终可点**，再点即 `WordRepository.toggleMine` / `toggleMineByText` 移除。**不弹提示、不询问、不撤销**（用户明确只用它撤销"刚误加"，此场景无进度可丢）；`contentDescription` 用**动作**文案（`detail_remove`）而非状态文案。注意 `WordDetailScreen` 的"移出我要背"仍是硬删无撤销，与本次口径不同，属已知差异
+- **"已添加/已星标"标记必须从数据库读，不能靠本地标志**（用户 2026-09-16 实测踩到）：`DictWordDao.getAllHeads()` 只取 `source IN (0,2)`，**不含自定义词**——凡是当年经"在线结果/拼写建议"加入过（`source=1`）的词，再搜时本地查不到、走联网、在线行会**错误显示 +**；照旧逻辑点 + 再点 ✓ 就会删掉一张**有分数**的词卡。故搜索流算出结果后用 `findMineWords` / `findStarredWords` **按文本回填** `onlineAdded/onlineStarred/suggestionAdded/suggestionStarred`，且**每轮搜索都要把四个标记全部重建**（原先只清 online 两项，导致建议行的 ✓/★ 跨查询残留）
+- **拉黑必须触发重搜才会消失**：搜索流是 `combine(query.debounce(250).distinctUntilChanged(), refreshTick)`，`debounce` 只作用在 query 上、tick 立刻穿透。三条拉黑路径（词库本地行 / 在线结果行 / 拼写建议行）**都必须 `refreshTick++`**——曾漏掉在线结果行那条，用户实测"拉黑了还显示在上面"
 - **图标集**：项目只依赖 `material-icons-core`（49 个图标），**没有** `Bookmark`/`Block`/`StarBorder`/`material-icons-extended`。星标用 `Icons.Filled.Star`（实心）/`Icons.Outlined.Star`（描边）、"我要背"tab 用 `Icons.Filled.Favorite`、黑名单用**自绘矢量图** `res/drawable/ic_block.xml`（🚫 圆圈加斜杠，24dp/24 视口单 path，照 `ic_notification.xml` 的写法）；不使用彩色 emoji 字符（无法 tint，与单色图标风格打架）。新增图标前先确认在核心集内，或说明引入 extended（约 10MB）的理由
 - **已添加标注**（用户 2026-09-10）：候选行「已添加」（tertiary 色）标注已在我要背的词且不可勾选（`UserWordDao.findMineWords` JOIN 查询，会话内每词只查一次）；加词成功后候选移除
 - **有道解析**（2026-09-10 实测接口结构变更）：`ec.word[k].trs[].tr[].l.i[]` 新结构为主 → 兼容旧 `ec.trs`（`tr.tr[].line`）→ `fanyi` → `web_trans` 同 key 网络释义兜底；样本固化在 `OnlineDictClientTest`
@@ -113,7 +116,7 @@
   - 两个重载：`ScrollState`（`Column`+`verticalScroll`，视口高取 `ScrollState.viewportSize`，1.7.6 已有该公开 API）与 `LazyListState`（懒列表拿不到内容总高度，用"可见条目数 / 总条目数"近似；本项目行高接近一致，误差可忽略）
   - **颜色不硬编码两套 RGB**：取 `MaterialTheme.colorScheme.onSurfaceVariant` + 透明度。App 的深色模式是**换主题**，主题色会自动跟着切，任何主题调整下都协调；写死颜色反而会在以后改主题时脱节
   - 使用时放在 `.padding(...)` **之前**（更靠近滚动容器），滚动条才贴容器右缘；横向的 `LazyRow`（我要背筛选 chips）不加
-- **行尾按钮点击动画**（`ui/components/WordRow.kt` 的 `RowTailAction`，用户 2026-09-16 要求仿 B 站点赞/投币/收藏）：点击时缩放 `1.0 → 1.35 → 1.0`、用 `spring(DampingRatioMediumBouncy)` 回弹过冲；tint 另走 `animateColorAsState` 平滑过渡（描边星↔实心星、+↔✓ 不硬切）。全部 11 个调用点共用这一个组件，改一处即全覆盖
+- **行尾按钮点击动画**（`ui/components/WordRow.kt` 的 `RowTailAction`，用户 2026-09-16 要求仿 B 站点赞/投币/收藏）：点击时缩放到 `pressedScale` 再回弹到 1.0，用 `spring(DampingRatioMediumBouncy)` 过冲；tint 另走 `animateColorAsState` 平滑过渡（描边星↔实心星、+↔✓ 不硬切）。**加入传 1.35（弹大）、取消传 0.75（先缩，读起来是"被取走"）**。全部 11 个调用点共用这一个组件，改一处即全覆盖
 
 ## 六、里程碑验收清单（完成打勾）
 
@@ -127,6 +130,7 @@
 - [ ] M5 发布：`gradlew build` 全量通过；深色主题/空态/图标；**用户检阅通过后** commit + push（push 前须再次确认）
 - [ ] M6 第四轮反馈（2026-09-16）：① 词黑名单（升级自"忽略"，词库行也能拉黑 + 我的页管理入口可恢复）② 词库在线结果可点开详情 ③ 星标（永不算已掌握 / 不计入今日背会 / 权重 ×3；未入库时点星标=自动加入）④ 行尾统一三件套（黑名单|星标|加入）⑤ 小爱同学（结论：**平台限制，App 侧无法注册语音别名**，只做引导）⑥ 联网搜索纠错
 - [ ] M7 第五轮打磨（2026-09-16）：① 我要背列表改倒序（新添加在前）② 所有可下拉界面加细滚动条（含扫词候选面板，深浅色自动适配）③ 黑名单图标改 🚫（自绘矢量图）④ 行尾三个按钮加点击回弹动画
+- [ ] M8 第六轮修正（2026-09-16）：① 修"在线结果拉黑后不消失"（漏 `refreshTick++`）② 「已添加/已星标」标记改为从库按文本回填（否则自定义词误显示 +，再点 ✓ 会删掉有分数的卡）③ 加入可再点取消（切换 + 两套动画）④ 🚫 斜线方向改 ＼（`<group scaleX="-1" translateX="24">` 镜像，不用 autoMirrored）⑤ 插件余额动画改按墙上时间匀速推进
 
 ## 七、构建与验证命令
 

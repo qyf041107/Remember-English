@@ -1,12 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 黑名单图标（🚫）：圆圈加斜杠。自绘而非引入 material-icons-extended（该库为 49 图标的核心集之外，约 10MB）。
-     单色填充，由 Compose 侧 tint 上色，故 fillColor 写白色即可。 -->
+<!-- 黑名单图标（🚫）：圆圈加斜杠。自绘而非引入 material-icons-extended（该库为 49 图标核心集之外，约 10MB）。
+     单色填充，由 Compose 侧 tint 上色，故 fillColor 写白色即可。
+
+     斜线方向（用户 2026-09-16 指定为"向右斜"，即 ＼ 左上→右下）：
+     下面 pathData 用的是 Material `block` 原路径，其斜杠是 ／（左下→右上），
+     故用 <group> 做**水平镜像**（矩阵为 T(tx,ty)·R·S 且 pivot 默认 0，即 (x,y) → (24-x, y)）——
+     圆对称、只有斜杠有方向，镜像后即为 ＼，且两条子路径绕向同时翻转、符号仍相反，nonZero 填充结果不变。
+     注意**不要**用 android:autoMirrored="true"：那只在 RTL 语言下生效，中文界面永远不翻。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM4,12c0,-4.42 3.58,-8 8,-8 1.85,0 3.55,0.63 4.9,1.69L5.69,16.9C4.63,15.55 4,13.85 4,12zM12,20c-1.85,0 -3.55,-0.63 -4.9,-1.69L18.31,7.1C19.37,8.45 20,10.15 20,12c0,4.42 -3.58,8 -8,8z" />
+    <group
+        android:scaleX="-1"
+        android:translateX="24">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM4,12c0,-4.42 3.58,-8 8,-8 1.85,0 3.55,0.63 4.9,1.69L5.69,16.9C4.63,15.55 4,13.85 4,12zM12,20c-1.85,0 -3.55,-0.63 -4.9,-1.69L18.31,7.1C19.37,8.45 20,10.15 20,12c0,4.42 -3.58,8 -8,8z" />
+    </group>
 </vector>

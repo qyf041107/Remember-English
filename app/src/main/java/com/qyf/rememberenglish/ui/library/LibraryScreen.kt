@@ -144,7 +144,7 @@ fun LibraryScreen(
                                 added = state.onlineAdded,
                                 starred = state.onlineStarred,
                                 onClick = { viewModel.openOnlineWordDetail(onWordClick) },
-                                onAdd = viewModel::addOnlineWordToMine,
+                                onAdd = viewModel::toggleOnlineMine,
                                 onStar = viewModel::starOnlineWord,
                                 onBlacklist = viewModel::blacklistOnlineWord,
                             )
@@ -155,7 +155,7 @@ fun LibraryScreen(
                                 added = state.suggestionAdded,
                                 starred = state.suggestionStarred,
                                 onClick = { viewModel.openSuggestionDetail(it, onWordClick) },
-                                onAdd = viewModel::addSuggestionToMine,
+                                onAdd = viewModel::toggleSuggestionMine,
                                 onStar = viewModel::toggleSuggestionStar,
                                 onBlacklist = viewModel::blacklistSuggestion,
                             )
@@ -168,7 +168,7 @@ fun LibraryScreen(
                             inMine = hit.word.id in state.inMineIds,
                             starred = hit.word.id in state.starredIds,
                             onClick = { onWordClick(hit.word.id) },
-                            onAdd = { viewModel.addToMine(hit.word.id) },
+                            onToggleMine = { viewModel.toggleMine(hit.word.id) },
                             onStar = { viewModel.toggleStar(hit.word.id, hit.word.word) },
                             onBlacklist = { viewModel.blacklistWord(hit.word.word) },
                             modifier = Modifier.padding(bottom = 2.dp),
@@ -211,7 +211,7 @@ fun LibraryScreen(
                             added = state.onlineAdded,
                             starred = state.onlineStarred,
                             onClick = { viewModel.openOnlineWordDetail(onWordClick) },
-                            onAdd = viewModel::addOnlineWordToMine,
+                            onAdd = viewModel::toggleOnlineMine,
                             onStar = viewModel::starOnlineWord,
                             onBlacklist = viewModel::blacklistOnlineWord,
                         )
@@ -228,7 +228,7 @@ fun LibraryScreen(
                             added = state.suggestionAdded,
                             starred = state.suggestionStarred,
                             onClick = { viewModel.openSuggestionDetail(it, onWordClick) },
-                            onAdd = viewModel::addSuggestionToMine,
+                            onAdd = viewModel::toggleSuggestionMine,
                             onStar = viewModel::toggleSuggestionStar,
                             onBlacklist = viewModel::blacklistSuggestion,
                         )
@@ -321,10 +321,11 @@ private fun OnlineResultContent(
             RowTailAction(
                 icon = if (added) Icons.Filled.Check else Icons.Filled.Add,
                 contentDescription = stringResource(
-                    if (added) R.string.detail_in_mine else R.string.detail_not_in_mine,
+                    if (added) R.string.detail_remove else R.string.detail_not_in_mine,
                 ),
                 tint = if (added) MaterialTheme.colorScheme.primary else inactive,
-                enabled = !added,
+                // 已在"我要背"也保持可点：再点一次即撤回（用户 2026-09-16）
+                pressedScale = if (added) 0.75f else 1.35f,
                 onClick = onAdd,
             )
         }
@@ -393,7 +394,7 @@ private fun SuggestionContent(
                     }
                 }
                 RowTailAction(
-                    icon = Icons.Filled.Close,
+                    icon = ImageVector.vectorResource(R.drawable.ic_block),
                     contentDescription = stringResource(R.string.add_blacklist),
                     onClick = { onBlacklist(word.word) },
                 )
@@ -408,10 +409,11 @@ private fun SuggestionContent(
                 RowTailAction(
                     icon = if (isAdded) Icons.Filled.Check else Icons.Filled.Add,
                     contentDescription = stringResource(
-                        if (isAdded) R.string.detail_in_mine else R.string.detail_not_in_mine,
+                        if (isAdded) R.string.detail_remove else R.string.detail_not_in_mine,
                     ),
                     tint = if (isAdded) MaterialTheme.colorScheme.primary else inactive,
-                    enabled = !isAdded,
+                    // 已在"我要背"也保持可点：再点一次即撤回（用户 2026-09-16）
+                    pressedScale = if (isAdded) 0.75f else 1.35f,
                     onClick = { onAdd(word.word) },
                 )
             }
