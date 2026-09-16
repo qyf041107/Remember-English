@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qyf.rememberenglish.data.online.OnlineDictClient
 import com.qyf.rememberenglish.data.online.OnlineWord
+import com.qyf.rememberenglish.data.online.SpellSuggestClient
 import com.qyf.rememberenglish.data.repository.SearchHit
 import com.qyf.rememberenglish.data.repository.WordRepository
 import com.qyf.rememberenglish.data.settings.SettingsRepository
+import com.qyf.rememberenglish.domain.search.SpellSuggestionFilter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -30,6 +32,13 @@ sealed interface OnlineLookupState {
     data object Idle : OnlineLookupState
     data object Loading : OnlineLookupState
     data class Found(val word: OnlineWord) : OnlineLookupState
+
+    /**
+     * 拼错了：本地与联网精确查都没结果，但拼写建议接口给了候选（用户 2026-09-16）。
+     * [original] 是用户输入的错拼词，[words] 是纠正后并已回填完整释义的词。
+     */
+    data class Suggestions(val original: String, val words: List<OnlineWord>) : OnlineLookupState
+
     data object NotFound : OnlineLookupState
 }
 
@@ -44,6 +53,10 @@ data class LibraryUiState(
     val onlineAdded: Boolean = false,
     /** 在线结果已星标 */
     val onlineStarred: Boolean = false,
+    /** 拼写建议行已加入"我要背"（按单词文本记，建议词一般尚未入库） */
+    val suggestionAdded: Set<String> = emptySet(),
+    /** 拼写建议行已星标 */
+    val suggestionStarred: Set<String> = emptySet(),
     /** 查询词在黑名单里——不明说用户会以为搜索坏了 */
     val queryBlacklisted: Boolean = false,
     /** 刚拉黑的词（Snackbar 可撤销，null=无） */
@@ -57,6 +70,7 @@ data class LibraryUiState(
 class LibraryViewModel @Inject constructor(
     private val wordRepository: WordRepository,
     private val onlineDictClient: OnlineDictClient,
+    private val spellSuggestClient: SpellSuggestClient,
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
@@ -64,6 +78,8 @@ class LibraryViewModel @Inject constructor(
     private data class Flags(
         val onlineAdded: Boolean = false,
         val onlineStarred: Boolean = false,
+        val suggestionAdded: Set<String> = emptySet(),
+        val suggestionStarred: Set<String> = emptySet(),
         val queryBlacklisted: Boolean = false,
         val blacklistedWord: String? = null,
         val starNotice: String? = null,
@@ -98,7 +114,11 @@ class LibraryViewModel @Inject constructor(
                     // 模糊匹配有近似结果但缺精确词时也联网，如 wifi/serendipity 等未收录词）
                     val online = if (!blacklisted && hits.none { it.word.word == normalized }) {
                         val found = onlineDictClient.lookup(normalized)
-                        if (found != null) OnlineLookupState.Found(found) else OnlineLookupState.NotFound
+                        when {
+                            found != null -> OnlineLookupState.Found(found)
+                            // 精确查也失败 → 当作拼错了，用拼写建议纠错（用户 2026-09-16）
+                            else -> suggestWords(normalized)
+                        }
                     } else {
                         OnlineLookupState.Idle
                     }
@@ -128,6 +148,8 @@ class LibraryViewModel @Inject constructor(
             online = outcome.online,
             onlineAdded = f.onlineAdded,
             onlineStarred = f.onlineStarred,
+            suggestionAdded = f.suggestionAdded,
+            suggestionStarred = f.suggestionStarred,
             queryBlacklisted = f.queryBlacklisted,
             blacklistedWord = f.blacklistedWord,
             starNotice = f.starNotice,
@@ -223,8 +245,67 @@ class LibraryViewModel @Inject constructor(
         flags.update { it.copy(blacklistedWord = online.word, queryBlacklisted = true) }
     }
 
+    // ---- 拼写建议行（用户 2026-09-16）：与在线结果行同样的三件套 ----
+
+    /** 拼写建议行：加入我要背 */
+    fun addSuggestionToMine(word: String) {
+        viewModelScope.launch {
+            wordRepository.addWords(listOf(word))
+            flags.update { it.copy(suggestionAdded = it.suggestionAdded + word) }
+        }
+    }
+
+    /** 拼写建议行：星标切换（未入库时先加入再打星） */
+    fun toggleSuggestionStar(word: String) {
+        viewModelScope.launch {
+            if (word in flags.value.suggestionStarred) {
+                wordRepository.unstarWordByText(word)
+                flags.update { it.copy(suggestionStarred = it.suggestionStarred - word) }
+            } else {
+                val newlyAdded = wordRepository.starWordByText(word)
+                flags.update {
+                    it.copy(
+                        suggestionStarred = it.suggestionStarred + word,
+                        suggestionAdded = if (newlyAdded) it.suggestionAdded + word else it.suggestionAdded,
+                        starNotice = if (newlyAdded) word else it.starNotice,
+                    )
+                }
+            }
+        }
+    }
+
+    /** 拼写建议行：拉黑（重搜后不会再从建议里回来，见 suggestWords 的黑名单过滤） */
+    fun blacklistSuggestion(word: String) {
+        viewModelScope.launch { settingsRepository.addToBlacklist(word) }
+        flags.update { it.copy(blacklistedWord = word) }
+        refreshTick.update { it + 1 }
+    }
+
+    /** 点拼写建议行 → 落库后进详情页（与在线结果同一路径） */
+    fun openSuggestionDetail(word: String, onReady: (Long) -> Unit) {
+        viewModelScope.launch {
+            onReady(wordRepository.ensureCustomWord(word).id)
+        }
+    }
+
     private fun currentOnlineWord(): OnlineWord? =
         (uiState.value.online as? OnlineLookupState.Found)?.word
+
+    /**
+     * 精确查也失败 → 用有道拼写建议纠错（用户 2026-09-16）。
+     * 建议词必须**再查一次 jsonapi 回填完整释义**：suggest 返回的 explain 带 "..." 截断且无音标。
+     */
+    private suspend fun suggestWords(query: String): OnlineLookupState {
+        val candidates = spellSuggestClient.suggest(query).map { it.word }
+        val picked = SpellSuggestionFilter.filter(query, candidates)
+            .filterNot { wordRepository.isBlacklisted(it) }
+        val words = picked.mapNotNull { onlineDictClient.lookup(it) }
+        return if (words.isEmpty()) {
+            OnlineLookupState.NotFound
+        } else {
+            OnlineLookupState.Suggestions(original = query, words = words)
+        }
+    }
 
     /** 在线词落库为自定义词（source=1），返回词条 id；幂等，重复调用复用同一行 */
     private suspend fun ensureOnlineWord(online: OnlineWord): Long =

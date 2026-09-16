@@ -140,6 +140,17 @@ fun LibraryScreen(
                                 onBlacklist = viewModel::blacklistOnlineWord,
                             )
                         }
+                        is OnlineLookupState.Suggestions -> item(key = "online-suggest") {
+                            SuggestionContent(
+                                suggestions = online,
+                                added = state.suggestionAdded,
+                                starred = state.suggestionStarred,
+                                onClick = { viewModel.openSuggestionDetail(it, onWordClick) },
+                                onAdd = viewModel::addSuggestionToMine,
+                                onStar = viewModel::toggleSuggestionStar,
+                                onBlacklist = viewModel::blacklistSuggestion,
+                            )
+                        }
                         else -> {}
                     }
                     items(state.results, key = { "hit-${it.word.id}" }) { hit ->
@@ -191,6 +202,20 @@ fun LibraryScreen(
                             onAdd = viewModel::addOnlineWordToMine,
                             onStar = viewModel::starOnlineWord,
                             onBlacklist = viewModel::blacklistOnlineWord,
+                        )
+                    }
+                }
+                // 拼错了：本地与联网精确查都没结果，给出纠错建议（用户 2026-09-16）
+                state.online is OnlineLookupState.Suggestions -> LazyColumn {
+                    item {
+                        SuggestionContent(
+                            suggestions = state.online as OnlineLookupState.Suggestions,
+                            added = state.suggestionAdded,
+                            starred = state.suggestionStarred,
+                            onClick = { viewModel.openSuggestionDetail(it, onWordClick) },
+                            onAdd = viewModel::addSuggestionToMine,
+                            onStar = viewModel::toggleSuggestionStar,
+                            onBlacklist = viewModel::blacklistSuggestion,
                         )
                     }
                 }
@@ -289,6 +314,94 @@ private fun OnlineResultContent(
             )
         }
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+    }
+}
+
+/**
+ * 拼写建议区块（用户 2026-09-16）：本地与联网精确查都没结果时，给出有道纠错候选。
+ * 建议词已回填完整释义（suggest 自带的 explain 带截断），行尾同样三件套。
+ */
+@Composable
+private fun SuggestionContent(
+    suggestions: OnlineLookupState.Suggestions,
+    added: Set<String>,
+    starred: Set<String>,
+    onClick: (String) -> Unit,
+    onAdd: (String) -> Unit,
+    onStar: (String) -> Unit,
+    onBlacklist: (String) -> Unit,
+) {
+    val inactive = MaterialTheme.colorScheme.onSurfaceVariant
+    Column {
+        Text(
+            text = stringResource(R.string.library_suggest_title, suggestions.original),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        suggestions.words.forEach { word ->
+            val isAdded = word.word in added
+            val isStarred = word.word in starred
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onClick(word.word) }
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = word.word,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (word.usphone.isNotBlank()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "/${word.usphone}/",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    word.meanings.firstOrNull()?.let { meaning ->
+                        Text(
+                            text = meaning,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
+                RowTailAction(
+                    icon = Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.add_blacklist),
+                    onClick = { onBlacklist(word.word) },
+                )
+                RowTailAction(
+                    icon = if (isStarred) Icons.Filled.Star else Icons.Outlined.Star,
+                    contentDescription = stringResource(
+                        if (isStarred) R.string.add_unstar else R.string.add_star,
+                    ),
+                    tint = if (isStarred) MaterialTheme.colorScheme.tertiary else inactive,
+                    onClick = { onStar(word.word) },
+                )
+                RowTailAction(
+                    icon = if (isAdded) Icons.Filled.Check else Icons.Filled.Add,
+                    contentDescription = stringResource(
+                        if (isAdded) R.string.detail_in_mine else R.string.detail_not_in_mine,
+                    ),
+                    tint = if (isAdded) MaterialTheme.colorScheme.primary else inactive,
+                    enabled = !isAdded,
+                    onClick = { onAdd(word.word) },
+                )
+            }
+            HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+        }
     }
 }
 

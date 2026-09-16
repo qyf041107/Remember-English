@@ -13,7 +13,7 @@
 
 ## 二、范围边界
 
-- **离线优先**：无后端、无账号，词库/词频/词形/词组全部打包进 assets；联网仅两处且均为用户 2026-09-08 批准：① **联网查词兜底**——本地词库+词组未收录时调用有道公开接口（jsonapi，无 key）；② **云端手写识别（可选）**——拍照/相册静态图调百度智能云手写文字识别（`data/online/BaiduHandwritingClient.kt`），密钥由用户在"我的"页填入、DataStore 本地存储**不入仓库**，失败自动回退本地 ML Kit；其余任何网络请求均不允许（INTERNET 权限已声明）
+- **离线优先**：无后端、无账号，词库/词频/词形/词组全部打包进 assets；联网仅**三处**：① **联网查词兜底**——本地词库+词组未收录时调用有道公开接口（jsonapi，无 key），用户 2026-09-08 批准；② **云端手写识别（可选）**——拍照/相册静态图调百度智能云手写文字识别（`data/online/BaiduHandwritingClient.kt`），密钥由用户在"我的"页填入、DataStore 本地存储**不入仓库**，失败自动回退本地 ML Kit，用户 2026-09-08 批准；③ **联网拼写纠错**——本地与联网精确查**都失败**时调有道拼写建议（`data/online/SpellSuggestClient.kt`，无 key），用户 2026-09-16 批准；其余任何网络请求均不允许（INTERNET 权限已声明）
 - UI 文案一律**中文**；界面克制：Material3 默认组件，不加装饰性图片/动画
 - 技术栈（已与用户确认）：Kotlin + Jetpack Compose、ML Kit 离线 OCR、三键分数模型（用户 2026-09-07 由 SM-2 SRS 改定）、开源词库打包
 
@@ -97,6 +97,10 @@
 - **联网查词兜底**（`data/online/OnlineDictClient.kt`，用户 2026-09-08 批准）：本地词库+词组**无精确匹配**时（2026-09-10 扩展触发条件，模糊近似命中也联网），延迟 250ms 防抖后调用有道 jsonapi（HttpURLConnection，无新依赖，5s 超时），在线结果**置顶**显示并可加入"我要背"（入库为自定义词 source=1）；行尾 黑名单 / 星标 / + 图标与本地结果行（WordRow）完全一致（用户 2026-09-10 要求界面协调，2026-09-16 统一为三件套）
 - **在线结果可点开详情**（用户 2026-09-16 反馈"点不开"）：点击时先 `ensureCustomWord` 落库拿 `wordId`，再**复用现有 `WordDetailScreen`**——布局/加入我要背/星标全部现成，也不必处理加载态与重查失败。**不新建"在线词详情"页面**。代价是浏览过的在线词在 `dict_word` 留一行 source=1（词库页不显示该来源）
 - 查询词本身在黑名单里时：搜索结果只显示一行说明（"可在我的→词黑名单恢复"），**不吞掉** they/their/there 这类模糊结果，也不联网兜底
+- **联网拼写纠错**（用户 2026-09-16 批准，第三处联网接口）：触发时机是**最后兜底**——本地模糊无精确匹配 **且** `OnlineDictClient.lookup` 也返回 null 之后，才调 `SpellSuggestClient.suggest`（`https://dict.youdao.com/suggest?num=5&ver=3.0&doctype=json&cache=false&le=en&q=`），不干扰正常查询。返回的 `entry`=词、`explain`=释义但**带 "..." 截断且无音标**，故**必须**再 `lookup` 一次回填完整释义才能展示/入库
+  - 准确度门槛见 `domain/search/SpellSuggestionFilter.kt`（纯 Kotlin 可单测）：只收**单个纯英文单词**（滤掉 "quarantine area" 这类短语与含数字/中文条目）、编辑距离 ≤2、**保持有道自己的相关度排序**不重排、最多取 3 条。距离取 2 而非 1：最常见的**相邻字母换位**（recieve→receive）经典 Levenshtein 计 2，取 1 会把这类全滤掉
+  - 界面为「「%s」没有找到，你是不是想找：」区块，行尾同样三件套；建议词可点开详情（与在线结果同一路径）
+  - **已知可优化**：`jsonapi` 对拼错词本身会返回 `typos.typo[]`（`word`/`trans`），用它可以省掉一次 suggest 请求。当前实现未读该字段，走的是已批准的 suggest 接口
 - **导航过渡**（用户 2026-09-10 反馈默认 ~700ms 渐隐太慢）：NavHost 统一 fadeIn(tween(180)) / fadeOut(tween(120)) 四向过渡（`RememberEnglishAppUi.kt`）
 
 ## 六、里程碑验收清单（完成打勾）
@@ -132,3 +136,4 @@ node tools/build-phrases.mjs        # 重新生成词组 word_phrases.json（源
 - 真题词频来源：exam-data/NETEMVocabulary（CC BY-NC-SA 4.0，仅非商业使用）——README 与 App"关于"页必须标注来源与许可
 - 词组释义来源：ECDICT（MIT）——README 与 App"关于"页必须标注来源与许可
 - 联网查词：有道词典公开 jsonapi（无 key），仅本地未收录时兜底；用户 2026-09-08 批准（个人使用）
+- 联网拼写纠错：有道公开 suggest 接口（无 key），仅在本地与联网精确查都失败时兜底；用户 2026-09-16 批准（个人使用）

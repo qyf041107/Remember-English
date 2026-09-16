@@ -23,6 +23,7 @@
     <string name="library_online_loading">本地词库未收录，正在联网查询…</string>
     <string name="library_online_title">在线查询结果</string>
     <string name="library_blacklisted">「该词已在词黑名单中」，可在「我的 → 词黑名单」恢复</string>
+    <string name="library_suggest_title">「%1$s」没有找到，你是不是想找：</string>
 
     <!-- 词详情 -->
     <string name="detail_add">加入我要背</string>
