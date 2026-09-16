@@ -156,6 +156,18 @@ node tools/build-phrases.mjs        # 重新生成词组 word_phrases.json（源
 
 - 每完成一个里程碑 commit 一次（信息用中文简述内容）
 - `push origin main` 必须先经用户检阅确认
+
+### 发版（已跑通的流程 + 两个坑）
+
+1. README 的「更新日志」写该版本段落（`### vX.Y.Z（日期）`）
+2. `app/build.gradle.kts` 同步 `versionName`/`versionCode`
+3. `git tag -a vX.Y.Z -F notes.txt` → `git push origin main vX.Y.Z` → CI 构建并发布 Release
+
+**坑 1：Release 正文不要读标签附注。** 原实现用 `git tag --format='%(contents)'`，但 `actions/checkout` 常把标签取成**轻量引用**，此时 `%(contents)` 会落到提交对象上、取到**提交信息**而非附注（v1.0.2 看起来正常纯属侥幸——那次更新日志恰好写在提交信息里）。现改为 CI 用 `awk` 从 **README 抽取本版本段落**（单一数据源、本地可验证）。
+
+**坑 2：`softprops/action-gh-release` 对"已存在"的 Release 只更新附件，不会覆盖正文。** 因此**重推标签不会修正旧 Release 的正文**；要改历史 Release 的正文，只能在网页上编辑，或先删掉那个 Release 再重新触发。新版本（Release 尚不存在）会正常按 `body_path` 创建，不受影响。
+
+**网络**：本机到 GitHub 直连偶发失败，可用 `git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push ...`（临时参数，不改全局配置）。查状态优先用网页 HTML/atom（`releases.atom` 可读正文），**匿名 API 限流严重**（共享出口 IP，常直接 403）。
 - 词库来源：RealKai42/qwerty-learner（GPL-3.0）——README 与 App"关于"页必须标注来源与许可
 - 真题词频来源：exam-data/NETEMVocabulary（CC BY-NC-SA 4.0，仅非商业使用）——README 与 App"关于"页必须标注来源与许可
 - 词组释义来源：ECDICT（MIT）——README 与 App"关于"页必须标注来源与许可
