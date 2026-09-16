@@ -117,6 +117,12 @@
   - **颜色不硬编码两套 RGB**：取 `MaterialTheme.colorScheme.onSurfaceVariant` + 透明度。App 的深色模式是**换主题**，主题色会自动跟着切，任何主题调整下都协调；写死颜色反而会在以后改主题时脱节
   - 使用时放在 `.padding(...)` **之前**（更靠近滚动容器），滚动条才贴容器右缘；横向的 `LazyRow`（我要背筛选 chips）不加
 - **行尾按钮点击动画**（`ui/components/WordRow.kt` 的 `RowTailAction`，用户 2026-09-16 要求仿 B 站点赞/投币/收藏）：点击时缩放到 `pressedScale` 再回弹到 1.0，用 `spring(DampingRatioMediumBouncy)` 过冲；tint 另走 `animateColorAsState` 平滑过渡（描边星↔实心星、+↔✓ 不硬切）。**加入传 1.35（弹大）、取消传 0.75（先缩，读起来是"被取走"）**。全部 11 个调用点共用这一个组件，改一处即全覆盖
+- **Snackbar 三个坑**（都踩过，别再踩）：
+  1. **带 `actionLabel` 时 Material3 的默认 `duration` 是 `Indefinite`**——不会自动消失，这就是"提示显示时间太长"的根因。而它只有 `Short`(4s)/`Long`(10s) 两档、**没有 3 秒**，要精确控时就用 `withTimeoutOrNull(3_000) { showSnackbar(..., duration = Indefinite) }`：超时会取消 `showSnackbar`，其 `finally` 清掉数据、Snackbar 随之收起
+  2. **`consumeXxx()` 必须放在 `showSnackbar` 之后**：它清的往往就是这个 `LaunchedEffect` 的 key，放在前面会因 key 变化重启协程、把刚挂上的 Snackbar **自己取消掉**（表现为"提示根本不显示"）
+  3. 拉黑/星标这类会触发重搜的动作，**`consume` 与 `refreshTick` 不要和 Snackbar 抢同一个 key**；拉黑提示统一 3 秒（`BLACKLIST_SNACKBAR_MS`）
+- **写入与重搜的顺序**：`SettingsRepository.addToBlacklist` 是挂起的 DataStore 写。若在它完成前就 `refreshTick++`，重搜会读到**旧集合** → 该词没被过滤，出现"顶部提示说已在黑名单、词却还在列表里"的自相矛盾（实测踩到）。**必须 `launch { 写入; refreshTick++ }`**，让写入先落地
+- 点星标时若顺带加入"我要背"，**不弹任何提示**（用户 2026-09-16：那句话没有意义——星标变实心、加号变对勾本身已说明结果）。`starNotice` 相关字段与字符串已全部移除
 
 ## 六、里程碑验收清单（完成打勾）
 
@@ -131,6 +137,7 @@
 - [ ] M6 第四轮反馈（2026-09-16）：① 词黑名单（升级自"忽略"，词库行也能拉黑 + 我的页管理入口可恢复）② 词库在线结果可点开详情 ③ 星标（永不算已掌握 / 不计入今日背会 / 权重 ×3；未入库时点星标=自动加入）④ 行尾统一三件套（黑名单|星标|加入）⑤ 小爱同学（结论：**平台限制，App 侧无法注册语音别名**，只做引导）⑥ 联网搜索纠错
 - [ ] M7 第五轮打磨（2026-09-16）：① 我要背列表改倒序（新添加在前）② 所有可下拉界面加细滚动条（含扫词候选面板，深浅色自动适配）③ 黑名单图标改 🚫（自绘矢量图）④ 行尾三个按钮加点击回弹动画
 - [ ] M8 第六轮修正（2026-09-16）：① 修"在线结果拉黑后不消失"（漏 `refreshTick++`）② 「已添加/已星标」标记改为从库按文本回填（否则自定义词误显示 +，再点 ✓ 会删掉有分数的卡）③ 加入可再点取消（切换 + 两套动画）④ 🚫 斜线方向改 ＼（`<group scaleX="-1" translateX="24">` 镜像，不用 autoMirrored）⑤ 插件余额动画改按墙上时间匀速推进
+- [ ] M9 第七轮微调（2026-09-16）：① 点星标顺带加入"我要背"时不再弹提示 ② 拉黑提示固定显示 3 秒（Material3 无 3 秒档，用 `withTimeoutOrNull`）③ 修"拉黑写入未落地就重搜"的竞态 ④ 修"consume 放在 showSnackbar 之前导致提示根本不显示"
 
 ## 七、构建与验证命令
 

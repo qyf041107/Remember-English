@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -51,6 +52,10 @@ import com.qyf.rememberenglish.data.repository.SearchHit
 import com.qyf.rememberenglish.ui.components.RowTailAction
 import com.qyf.rememberenglish.ui.components.thinScrollbar
 import com.qyf.rememberenglish.ui.components.WordRow
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** 拉黑提示的显示时长（用户 2026-09-16 指定 3 秒；Material3 无此档，见下用 withTimeoutOrNull） */
+private const val BLACKLIST_SNACKBAR_MS = 3_000L
 
 /**
  * 词库：搜索 + 列表（点击进详情，行尾 黑名单 | 星标 | 加入）。
@@ -67,23 +72,24 @@ fun LibraryScreen(
     // 三个结果分支互斥，共用同一份滚动状态即可（细滚动条见下）
     val resultsState = rememberLazyListState()
 
-    // 拉黑（用户 2026-09-16）：Snackbar 可撤销
+    // 拉黑（用户 2026-09-16）：Snackbar 可撤销，**显示 3 秒**自动收起。
+    // Material3 的 showSnackbar 在带 actionLabel 时默认 duration = Indefinite（永不自动消失），
+    // 这正是"显示时间太长"的原因；而它只提供 Short(4s)/Long(10s) 两档、没有 3 秒，
+    // 故用 withTimeoutOrNull 精确控时——超时会取消 showSnackbar，其 finally 清掉数据、Snackbar 随之收起。
+    //
+    // ⚠️ consumeBlacklistedWord() **必须放在 showSnackbar 之后**：它清空的是本 LaunchedEffect 的 key，
+    //    若放在前面，key 一变就重启协程，会把刚挂上的 Snackbar 自己取消掉（结果就是"提示根本不显示"）。
     LaunchedEffect(state.blacklistedWord) {
-        state.blacklistedWord?.let { word ->
-            val action = snackbarHostState.showSnackbar(
+        val word = state.blacklistedWord ?: return@LaunchedEffect
+        val action = withTimeoutOrNull(BLACKLIST_SNACKBAR_MS) {
+            snackbarHostState.showSnackbar(
                 message = context.getString(R.string.add_blacklisted, word),
                 actionLabel = context.getString(R.string.mine_undo),
+                duration = SnackbarDuration.Indefinite,
             )
-            viewModel.consumeBlacklistedWord()
-            if (action == SnackbarResult.ActionPerformed) viewModel.unblacklistWord(word)
         }
-    }
-    // 点星标时若该词还没在"我要背"，会自动加入：提示一次
-    LaunchedEffect(state.starNotice) {
-        state.starNotice?.let { word ->
-            snackbarHostState.showSnackbar(context.getString(R.string.add_star_added, word))
-            viewModel.consumeStarNotice()
-        }
+        viewModel.consumeBlacklistedWord()
+        if (action == SnackbarResult.ActionPerformed) viewModel.unblacklistWord(word)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -169,7 +175,7 @@ fun LibraryScreen(
                             starred = hit.word.id in state.starredIds,
                             onClick = { onWordClick(hit.word.id) },
                             onToggleMine = { viewModel.toggleMine(hit.word.id) },
-                            onStar = { viewModel.toggleStar(hit.word.id, hit.word.word) },
+                            onStar = { viewModel.toggleStar(hit.word.id) },
                             onBlacklist = { viewModel.blacklistWord(hit.word.word) },
                             modifier = Modifier.padding(bottom = 2.dp),
                         )

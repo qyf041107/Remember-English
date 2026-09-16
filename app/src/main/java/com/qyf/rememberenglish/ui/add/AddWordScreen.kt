@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -59,8 +60,12 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qyf.rememberenglish.R
-import com.qyf.rememberenglish.ui.components.thinScrollbar
 import com.qyf.rememberenglish.data.ocr.PhotoDecoder
+import com.qyf.rememberenglish.ui.components.thinScrollbar
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** 拉黑提示的显示时长（用户 2026-09-16 指定 3 秒；Material3 无此档，见下用 withTimeoutOrNull） */
+private const val BLACKLIST_SNACKBAR_MS = 3_000L
 
 /** 扫词添加：全屏实时取景识别 + 候选词实时释义 + 勾选批量加入 + 拍照/相册（手写词录入） */
 @Composable
@@ -121,24 +126,21 @@ fun AddWordScreen(
             viewModel.consumeCloudFailed()
         }
     }
-    // 拉黑伪词（the/a/an、date/sun 等）：Snackbar 可撤销
+    // 拉黑伪词（the/a/an、date/sun 等）：Snackbar 可撤销，**显示 3 秒**自动收起。
+    // Material3 带 actionLabel 时默认 Indefinite（不自动消失），且只有 4s/10s 两档，故用超时精确控时。
+    // ⚠️ consumeBlacklistedWord() 必须放在 showSnackbar 之后——它是本 LaunchedEffect 的 key，
+    //    放在前面会因 key 变化重启协程、把刚挂上的 Snackbar 自己取消掉。
     LaunchedEffect(state.blacklistedWord) {
-        state.blacklistedWord?.let { word ->
-            val action = snackbarHostState.showSnackbar(
+        val word = state.blacklistedWord ?: return@LaunchedEffect
+        val action = withTimeoutOrNull(BLACKLIST_SNACKBAR_MS) {
+            snackbarHostState.showSnackbar(
                 message = context.getString(R.string.add_blacklisted, word),
                 actionLabel = context.getString(R.string.mine_undo),
+                duration = SnackbarDuration.Indefinite,
             )
-            viewModel.consumeBlacklistedWord()
-            if (action == SnackbarResult.ActionPerformed) viewModel.unblacklistWord(word)
         }
-    }
-    // 点星标时若该词还没在"我要背"，会自动加入：提示一次
-    // （取消星标不会移出"我要背"，移出请在"我要背"里左滑）
-    LaunchedEffect(state.starNotice) {
-        state.starNotice?.let { word ->
-            snackbarHostState.showSnackbar(context.getString(R.string.add_star_added, word))
-            viewModel.consumeStarNotice()
-        }
+        viewModel.consumeBlacklistedWord()
+        if (action == SnackbarResult.ActionPerformed) viewModel.unblacklistWord(word)
     }
 
     Box(

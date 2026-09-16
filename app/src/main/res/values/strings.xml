@@ -103,7 +103,6 @@
     <string name="add_blacklisted">已将「%1$s」加入黑名单，之后不再出现</string>
     <string name="add_star">星标（重点背）</string>
     <string name="add_unstar">取消星标</string>
-    <string name="add_star_added">已将「%1$s」加入我要背并加星</string>
 
     <!-- 词黑名单管理 -->
     <string name="blacklist_title">词黑名单</string>

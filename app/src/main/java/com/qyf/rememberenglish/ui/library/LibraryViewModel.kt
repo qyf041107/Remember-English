@@ -61,8 +61,6 @@ data class LibraryUiState(
     val queryBlacklisted: Boolean = false,
     /** 刚拉黑的词（Snackbar 可撤销，null=无） */
     val blacklistedWord: String? = null,
-    /** 点星标时顺带加入了"我要背"的词（提示一次，null=无） */
-    val starNotice: String? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
@@ -74,7 +72,11 @@ class LibraryViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
-    /** 搜索之外的一次性 UI 状态，聚在一起免得 combine 塞九个流 */
+    /**
+     * 搜索之外的一次性 UI 状态，聚在一起免得 combine 塞九个流。
+     * 注：点星标若顺带加入"我要背"，**不再弹提示**（用户 2026-09-16：那句话没有意义，
+     * 星标变实心、加号变对勾本身已经说明结果）。
+     */
     private data class Flags(
         val onlineAdded: Boolean = false,
         val onlineStarred: Boolean = false,
@@ -82,7 +84,6 @@ class LibraryViewModel @Inject constructor(
         val suggestionStarred: Set<String> = emptySet(),
         val queryBlacklisted: Boolean = false,
         val blacklistedWord: String? = null,
-        val starNotice: String? = null,
     )
 
     private data class SearchOutcome(
@@ -191,7 +192,6 @@ class LibraryViewModel @Inject constructor(
             suggestionStarred = f.suggestionStarred,
             queryBlacklisted = f.queryBlacklisted,
             blacklistedWord = f.blacklistedWord,
-            starNotice = f.starNotice,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 
@@ -207,23 +207,29 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch { wordRepository.toggleMine(wordId) }
     }
 
-    /** 词库行星标切换：未加入"我要背"时先自动加入再打星（用户 2026-09-16） */
-    fun toggleStar(wordId: Long, word: String) {
+    /** 词库行星标切换：未加入"我要背"时先自动加入再打星（用户 2026-09-16，不弹提示） */
+    fun toggleStar(wordId: Long) {
         val starred = wordId in uiState.value.starredIds
         viewModelScope.launch {
             if (starred) {
                 wordRepository.setStarred(wordId, false)
-            } else if (wordRepository.starWord(wordId)) {
-                flags.update { it.copy(starNotice = word) }
+            } else {
+                wordRepository.starWord(wordId)
             }
         }
     }
 
-    /** 词库行拉黑：持久化 + 从结果里消失，Snackbar 可撤销 */
+    /**
+     * 词库行拉黑：持久化 + 从结果里消失，Snackbar 可撤销。
+     * **必须等写入完成再重搜**：addToBlacklist 是挂起的 DataStore 写，若在它完成前就 refreshTick，
+     * 重搜会读到旧的集合 → 词没被过滤，出现"提示说已在黑名单、词却还在列表里"的自相矛盾。
+     */
     fun blacklistWord(word: String) {
-        viewModelScope.launch { settingsRepository.addToBlacklist(word) }
         flags.update { it.copy(blacklistedWord = word) }
-        refreshTick.update { it + 1 }
+        viewModelScope.launch {
+            settingsRepository.addToBlacklist(word)
+            refreshTick.update { it + 1 }
+        }
     }
 
     fun unblacklistWord(word: String) {
@@ -235,10 +241,6 @@ class LibraryViewModel @Inject constructor(
 
     fun consumeBlacklistedWord() {
         flags.update { it.copy(blacklistedWord = null) }
-    }
-
-    fun consumeStarNotice() {
-        flags.update { it.copy(starNotice = null) }
     }
 
     /**
@@ -300,22 +302,22 @@ class LibraryViewModel @Inject constructor(
                     it.copy(
                         onlineStarred = true,
                         onlineAdded = it.onlineAdded || newlyAdded,
-                        starNotice = if (newlyAdded) online.word else it.starNotice,
                     )
                 }
             }
         }
     }
 
-    /** 在线结果拉黑 */
+    /** 在线结果拉黑（同样要等写入完成再重搜，见 blacklistWord 的说明） */
     fun blacklistOnlineWord() {
         val online = currentOnlineWord() ?: return
-        viewModelScope.launch { settingsRepository.addToBlacklist(online.word) }
         flags.update { it.copy(blacklistedWord = online.word, queryBlacklisted = true) }
         // 必须重搜才会消失（用户 2026-09-16 反馈"拉黑了还显示在上面"）：
-        // 与本地行 blacklistWord、建议行 blacklistSuggestion 保持一致——只有 refreshTick 变了
-        // 才会重跑 search()，届时 isBlacklisted 为真 → online 变 Idle → 那一行才移除。
-        refreshTick.update { it + 1 }
+        // 只有 refreshTick 变了才会重跑 search()，届时 isBlacklisted 为真 → online 变 Idle → 那一行才移除。
+        viewModelScope.launch {
+            settingsRepository.addToBlacklist(online.word)
+            refreshTick.update { it + 1 }
+        }
     }
 
     // ---- 拼写建议行（用户 2026-09-16）：与在线结果行同样的三件套 ----
@@ -340,18 +342,19 @@ class LibraryViewModel @Inject constructor(
                     it.copy(
                         suggestionStarred = it.suggestionStarred + word,
                         suggestionAdded = if (newlyAdded) it.suggestionAdded + word else it.suggestionAdded,
-                        starNotice = if (newlyAdded) word else it.starNotice,
                     )
                 }
             }
         }
     }
 
-    /** 拼写建议行：拉黑（重搜后不会再从建议里回来，见 suggestWords 的黑名单过滤） */
+    /** 拼写建议行：拉黑（同样等写入完成再重搜；重搜后不会再从建议里回来，见 suggestWords 的黑名单过滤） */
     fun blacklistSuggestion(word: String) {
-        viewModelScope.launch { settingsRepository.addToBlacklist(word) }
         flags.update { it.copy(blacklistedWord = word) }
-        refreshTick.update { it + 1 }
+        viewModelScope.launch {
+            settingsRepository.addToBlacklist(word)
+            refreshTick.update { it + 1 }
+        }
     }
 
     /** 点拼写建议行 → 落库后进详情页（与在线结果同一路径） */

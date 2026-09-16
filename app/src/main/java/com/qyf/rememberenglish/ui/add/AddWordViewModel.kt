@@ -70,8 +70,6 @@ data class AddWordUiState(
     val blacklistedWord: String? = null,
     /** 候选词中已星标的词（用户 2026-09-16；星标=永不算已掌握+抽中权重×3） */
     val starred: Set<String> = emptySet(),
-    /** 刚因点星标而顺带加入"我要背"的词（Screen 提示一次，null=无） */
-    val starNotice: String? = null,
     val adding: Boolean = false,
     /** 最近一次加入结果（Screen 侧用资源字符串格式化） */
     val result: AddWordsResult? = null,
@@ -298,6 +296,7 @@ class AddWordViewModel @Inject constructor(
     /**
      * 星标切换（用户 2026-09-16）：未在"我要背"的先自动加入再打星（一次点击=我要死磕这个词）。
      * 取消星标**不会**移出"我要背"——移出请在"我要背"里左滑。
+     * 顺带加入"我要背"时**不弹提示**（用户 2026-09-16：那句话没有意义，星标与"已添加"的视觉变化已说明结果）。
      */
     fun toggleStar(text: String) {
         val starred = text in _ui.value.starred
@@ -306,20 +305,15 @@ class AddWordViewModel @Inject constructor(
             _ui.update { it.copy(starred = it.starred - text) }
         } else {
             viewModelScope.launch {
-                val newlyAdded = wordRepository.starWordByText(text)
+                wordRepository.starWordByText(text)
                 _ui.update { state ->
                     state.copy(
                         starred = state.starred + text,
                         inMine = state.inMine + text,
-                        starNotice = if (newlyAdded) text else null,
                     )
                 }
             }
         }
-    }
-
-    fun consumeStarNotice() {
-        _ui.update { it.copy(starNotice = null) }
     }
 
     fun addSelected() {
