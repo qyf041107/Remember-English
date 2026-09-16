@@ -44,10 +44,12 @@
 
 ## 五、关键设计（实现依据）
 
-### 数据（Room 3 表）
+### 数据（Room 3 表，当前 schema v3）
 - `dict_word`：id、word(UNIQUE)、usphone、ukphone、meanings(JSON 文本)、source(0=内置红宝书/1=自定义/2=考纲内词组)、createdAt。**自定义词也进此表**（source 区分），"词库"页只显示 source=0 与 source=2
-- `user_word`（我要背+背分）：wordId(FK UNIQUE)、addedAt、score(背会分数)、wrongCount、unclearCount、lastAnsweredAt(0=从未作答)、isSuspended
-- `answer_log`：userWordId、wordId、rating(0我不会/1不清楚/2我知道)、reviewedAt、prevScore、newScore；今日背会数 = 当天 `rating != 0` 的 **DISTINCT wordId** 数
+- `user_word`（我要背+背分）：wordId(FK UNIQUE)、addedAt、score(背会分数)、wrongCount、unclearCount、lastAnsweredAt(0=从未作答)、isSuspended、**isStarred**(星标，用户 2026-09-16)
+- `answer_log`：userWordId、wordId、rating(0我不会/1不清楚/2我知道)、reviewedAt、prevScore、newScore、**wasStarred**(作答时星标快照)；今日背会数 = 当天 `rating != 0 且 wasStarred = 0` 的 **DISTINCT wordId** 数
+  - **为什么存快照而不 JOIN `user_word` 现查**：否则"今天答了 5 个词，随手给其中 3 个打星"会让今日进度从 5 掉回 2（进度条倒退、提醒判断翻转）；也会把"左滑移出＝今日进度倒退"变成永久行为
+- **迁移**：`AppDatabase` 当前 `version = 3`，`MIGRATION_2_3` 手写两条 `ALTER TABLE ... ADD COLUMN ... NOT NULL DEFAULT 0`。**保留** `fallbackToDestructiveMigrationFrom(1)`（只管 v1→v2），**不得**改成无条件 `fallbackToDestructiveMigration()`——会清空用户全部背词记录。`exportSchema = true`，`app/schemas/.../3.json` 必须随提交入库
 - assets 另有：
   - `word_freq.json`（真题词频，小写词 → 出现次数），供 OCR 候选排序、搜索同档排序与详情页展示
   - `word_forms.json`（时态变形 → 原形，约 2.1 万条；规则变形 + 不规则动词表，仅考纲词），搜索变形词时同时显示原形（"went"的原形）
@@ -57,6 +59,9 @@
 - 三键记分：**我知道 +1 分｜不清楚 +0.5 分｜我不会 +0 分**；一单词分数 **满 5 分 = 已掌握**
 - 筛选口径（"我要背"页）：新词 = 0 分且从未作答；学习中 = 已作答但未满 5 分（含答错 0 分的）；已掌握 = ≥5 分
 - **加权随机抽词**（`domain/select/StudyPicker.kt`，无固定队列）：权重 = `(1 + wrongCount + unclearCount) × (已掌握 ? 0.25 : 1)`——不会/不清楚过的词出现最勤，已掌握词 0.25 折一笔带过；尽量不与刚答过的词重复
+- **星标**（用户 2026-09-16 选定最激进口径，`UserWord.isStarred`）三条语义：① **永不算已掌握**（`isMastered = !isStarred && score >= 5`，一处改动即让"我要背"筛选/我的页统计/背诵卡显示全部跟着对）② **不计入今日背会数**（`answer_log.wasStarred` 快照过滤）③ **抽中权重 ×3 且不受 0.25 折**（`ScoreConstants.STAR_PICK_WEIGHT`，`pickWeight` 里星标判定**必须先于**已掌握判定）
+  - 星标是词卡属性，故**只对已在"我要背"的词存在**。行上点星标时若词还没在"我要背"，**先自动加入再打星**（一次点击=我要死磕这个词，Snackbar 提示）；**取消星标不会移出"我要背"**（移出是左滑的职责）
+  - 星标词**不计入今日背会**会带来一个后果：未星标词数 < 每日目标时目标在数学上不可达。`DailyProgress.reachable` 标记此情形，今日页**只提示不阻断**（会话不被强行中断，用户仍可练星标词；`isDone` 不受影响，否则词少的用户会被误判"今日已完成"而再也收不到提醒）
 - 学习卡片：先只显示英文，界面提示"如果不会，请点击屏幕"，点卡片显示释义；下方三键 我知道/我不会/不清楚；**作答后都停留展示释义**——答对 1.5 秒确认（用户 2026-09-10），答错/不清楚 3 秒看清（用户 2026-09-08），点击卡片可跳过（常量 `StudyViewModel.KNOW_WAIT_MS/WRONG_WAIT_MS`）
 - 两个学习入口（用户 2026-09-07 指定）：① "今日"页**随机提问**按钮 → 加权随机会话（达成今日目标即结束）；② "我要背"列表**点单词** → 单词背诵卡（同一交互，单次记分后返回）；列表**左滑单词** → 移出我要背（Snackbar 可撤销）
 - 每日目标 = 当天**背会词数**（当天 rating≠0 的不同单词数，默认 20 可设置）
@@ -79,15 +84,19 @@
 - 提取（`domain/ocr/WordExtractor.kt` 纯 Kotlin）：正则 `[A-Za-z][A-Za-z'-]+` → 小写 → 滤单字符/含数字/含空格 → 保序去重
 - 命中词库/词组显示释义；未命中 → 自定义词（source=1）。拍照/相册/实时流走同一解析管线
 - **候选联网释义**（用户 2026-09-08 要求；2026-09-10 扩展到实时流）：拍照/相册/云端/实时流中未收录的词，识别出即自动调有道 jsonapi 查释义显示在候选行（并发限 4、会话内缓存、查不到也缓存防重查，逐词只查一次防逐帧刷请求；标签"在线"）；词仍按自定义词入库
-- **忽略伪词**（用户 2026-09-10，date/sun 每次 OCR 都出现）：候选行尾 ✕ 忽略，DataStore `ocr_ignored_words` 持久化，Snackbar 可撤销；不做词黑名单与管理 UI
-- **已添加标注**（用户 2026-09-10）：候选行尾"已添加"（tertiary 色）标注已在我要背的词且不可勾选（`UserWordDao.findMineWords` JOIN 查询，会话内每词只查一次）；加词成功后候选移除
+- **词黑名单**（用户 2026-09-10 引入为"忽略伪词"，2026-09-16 升级为正式黑名单）：候选行尾 ✕ / 词库行 ✕ 拉黑，DataStore `ocr_ignored_words` 持久化（**key 不变，改名会丢已有忽略词**），Snackbar 可撤销；黑名单同时过滤**扫词候选**与**词库搜索结果**（`WordRepository.search` 与在线兜底都查黑名单，否则词库行的"加入黑名单"看起来毫无作用）；"我的 → 生词管理 → 词黑名单"可查看与恢复
+- **行尾三件套**（用户 2026-09-16）：词库行与在线结果行统一为 **黑名单 | 星标 | 加入我要背**，同一套紧凑热区（图标 20dp、热区 34dp，`WordRow.kt` 的 `RowTailAction`），避免尺寸不一互相"打架"；扫词候选行此处没有"加入"按钮（加词走勾选+底部批量），故为 状态标注 + 黑名单 + 星标
+- **图标集**：项目只依赖 `material-icons-core`（49 个图标），**没有** `Bookmark`/`Block`/`StarBorder`/`material-icons-extended`。黑名单沿用 ✕、星标用 `Icons.Filled.Star`（实心）/`Icons.Outlined.Star`（描边）、"我要背"tab 用 `Icons.Filled.Favorite`。新增图标前先确认在核心集内，或说明引入 extended 的理由
+- **已添加标注**（用户 2026-09-10）：候选行「已添加」（tertiary 色）标注已在我要背的词且不可勾选（`UserWordDao.findMineWords` JOIN 查询，会话内每词只查一次）；加词成功后候选移除
 - **有道解析**（2026-09-10 实测接口结构变更）：`ec.word[k].trs[].tr[].l.i[]` 新结构为主 → 兼容旧 `ec.trs`（`tr.tr[].line`）→ `fanyi` → `web_trans` 同 key 网络释义兜底；样本固化在 `OnlineDictClientTest`
 
 ### 词库搜索（用户 2026-09-08 要求）
 - **模糊匹配**（`domain/search/FuzzyMatcher.kt` 纯 Kotlin，全量 ~6700 词逐词打分）：精确 > 前缀 > 包含 > 编辑距离 ≤2（≤3 字母词容 1），同档内按真题词频降序；输错几个字母也能搜到，最佳匹配置顶
 - **变形词与原形**：查 `word_forms.json`，搜到的变形词结果上方附带原形词条（note "「went」的原形"）
 - **一键清空**：搜索框右侧小叉
-- **联网查词兜底**（`data/online/OnlineDictClient.kt`，用户 2026-09-08 批准）：本地词库+词组**无精确匹配**时（2026-09-10 扩展触发条件，模糊近似命中也联网），延迟 250ms 防抖后调用有道 jsonapi（HttpURLConnection，无新依赖，5s 超时），在线结果**置顶**显示并可加入"我要背"（入库为自定义词 source=1）；行尾 + / ✓ 图标与本地结果行（WordRow）一致（用户 2026-09-10 要求界面协调）
+- **联网查词兜底**（`data/online/OnlineDictClient.kt`，用户 2026-09-08 批准）：本地词库+词组**无精确匹配**时（2026-09-10 扩展触发条件，模糊近似命中也联网），延迟 250ms 防抖后调用有道 jsonapi（HttpURLConnection，无新依赖，5s 超时），在线结果**置顶**显示并可加入"我要背"（入库为自定义词 source=1）；行尾 黑名单 / 星标 / + 图标与本地结果行（WordRow）完全一致（用户 2026-09-10 要求界面协调，2026-09-16 统一为三件套）
+- **在线结果可点开详情**（用户 2026-09-16 反馈"点不开"）：点击时先 `ensureCustomWord` 落库拿 `wordId`，再**复用现有 `WordDetailScreen`**——布局/加入我要背/星标全部现成，也不必处理加载态与重查失败。**不新建"在线词详情"页面**。代价是浏览过的在线词在 `dict_word` 留一行 source=1（词库页不显示该来源）
+- 查询词本身在黑名单里时：搜索结果只显示一行说明（"可在我的→词黑名单恢复"），**不吞掉** they/their/there 这类模糊结果，也不联网兜底
 - **导航过渡**（用户 2026-09-10 反馈默认 ~700ms 渐隐太慢）：NavHost 统一 fadeIn(tween(180)) / fadeOut(tween(120)) 四向过渡（`RememberEnglishAppUi.kt`）
 
 ## 六、里程碑验收清单（完成打勾）
@@ -100,6 +109,7 @@
 - [ ] M3 通知：真机提醒时间设 1 分钟后收到 heads-up；完成后当天不再收到
 - [ ] M4 OCR：WordExtractorTest 全绿；真机对书本实时识别出词并加入"我要背"
 - [ ] M5 发布：`gradlew build` 全量通过；深色主题/空态/图标；**用户检阅通过后** commit + push（push 前须再次确认）
+- [ ] M6 第四轮反馈（2026-09-16）：① 词黑名单（升级自"忽略"，词库行也能拉黑 + 我的页管理入口可恢复）② 词库在线结果可点开详情 ③ 星标（永不算已掌握 / 不计入今日背会 / 权重 ×3；未入库时点星标=自动加入）④ 行尾统一三件套（黑名单|星标|加入）⑤ 小爱同学（结论：**平台限制，App 侧无法注册语音别名**，只做引导）⑥ 联网搜索纠错
 
 ## 七、构建与验证命令
 

@@ -8,6 +8,7 @@ import com.qyf.rememberenglish.domain.srs.ScoreConstants.SCORE_INIT
 import com.qyf.rememberenglish.domain.srs.ScoreConstants.SCORE_KNOWN
 import com.qyf.rememberenglish.domain.srs.ScoreConstants.SCORE_UNCLEAR
 import com.qyf.rememberenglish.domain.srs.ScoreConstants.SCORE_WRONG
+import com.qyf.rememberenglish.domain.srs.ScoreConstants.STAR_PICK_WEIGHT
 
 /** 分数模型全部常量集中于此（CLAUDE.md 第四节：禁止散落魔法数字） */
 object ScoreConstants {
@@ -17,6 +18,8 @@ object ScoreConstants {
     const val MASTER_SCORE = 5.0 // 满 5 分 = 已掌握
     /** 复习阶段：已掌握词出现率打 0.25 折（用户 2026-09-07：权重 0.25，一笔带过） */
     const val MASTERED_PICK_WEIGHT = 0.25
+    /** 星标词抽中权重倍数（用户 2026-09-16：着重背诵，且不再受已掌握 0.25 折） */
+    const val STAR_PICK_WEIGHT = 3.0
     /** 新词加入时的初始分数 */
     const val SCORE_INIT = 0.0
 }
@@ -53,12 +56,19 @@ object ScoreScheduler {
         isSuspended = false,
     )
 
-    /** 提问权重：不会/不清楚过的词优先，已掌握词打 0.25 折（复习着重错词，已掌握一笔带过） */
+    /**
+     * 提问权重：不会/不清楚过的词优先，已掌握词打 0.25 折（复习着重错词，已掌握一笔带过）。
+     * 星标词（用户 2026-09-16）：固定 ×3，且**不受**已掌握 0.25 折——故必须先判星标。
+     */
     fun pickWeight(word: UserWord): Double {
         val base = 1.0 + word.wrongCount + word.unclearCount
+        if (word.isStarred) return base * STAR_PICK_WEIGHT
         return if (word.isMastered) base * MASTERED_PICK_WEIGHT else base
     }
 
-    /** 满 [MASTER_SCORE] 分判定已掌握 */
-    fun isMastered(score: Double): Boolean = score >= MASTER_SCORE
+    /**
+     * 纯按分数是否够已掌握线——**仅用于展示/测试**。
+     * 掌握判定必须走 [UserWord.isMastered]（星标词永不算已掌握），别用这个绕过。
+     */
+    fun hasReachedMasterScore(score: Double): Boolean = score >= MASTER_SCORE
 }

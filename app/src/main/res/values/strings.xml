@@ -22,6 +22,7 @@
     <string name="library_clear">清空搜索</string>
     <string name="library_online_loading">本地词库未收录，正在联网查询…</string>
     <string name="library_online_title">在线查询结果</string>
+    <string name="library_blacklisted">「该词已在词黑名单中」，可在「我的 → 词黑名单」恢复</string>
 
     <!-- 词详情 -->
     <string name="detail_add">加入我要背</string>
@@ -32,6 +33,7 @@
     <string name="detail_back">返回</string>
     <string name="detail_in_mine">已加入我要背</string>
     <string name="detail_not_in_mine">加入我要背</string>
+    <string name="detail_starred_hint">已星标：不会算作已掌握，会一直高频出现</string>
 
     <!-- 我要背 -->
     <string name="mine_add">添加单词</string>
@@ -43,6 +45,7 @@
     <string name="mine_filter_new">新词</string>
     <string name="mine_filter_learning">学习中</string>
     <string name="mine_filter_mastered">已掌握</string>
+    <string name="mine_filter_starred">星标</string>
     <string name="mine_stat_total">总数</string>
     <string name="mine_stat_new">新词</string>
     <string name="mine_stat_learning">学习中</string>
@@ -58,6 +61,7 @@
     <string name="study_done_title">今日目标已完成</string>
     <string name="study_done_body">今天背会 %1$d 个单词，真棒！明天见！</string>
     <string name="study_idle_no_words">先去"词库"或"我要背"添加要背的单词吧</string>
+    <string name="study_unreachable_hint">星标词不计入今日进度，未星标的词已不足目标数。再多加几个词，或取消一些星标。</string>
     <string name="study_progress">今日背会 %1$d/%2$d 个</string>
     <string name="study_reveal_hint">如果不会，请点击屏幕</string>
     <string name="study_know">我知道</string>
@@ -94,8 +98,18 @@
     <string name="add_result_custom">（新增自定义 %1$d 个）</string>
     <string name="add_result_already">，%1$d 个已在我要背</string>
     <string name="add_in_mine_tag">已添加</string>
-    <string name="add_ignore">忽略</string>
-    <string name="add_ignored">已忽略「%1$s」，之后不再出现在候选里</string>
+    <string name="add_blacklist">加入黑名单</string>
+    <string name="add_blacklisted">已将「%1$s」加入黑名单，之后不再出现</string>
+    <string name="add_star">星标（重点背）</string>
+    <string name="add_unstar">取消星标</string>
+    <string name="add_star_added">已将「%1$s」加入我要背并加星</string>
+
+    <!-- 词黑名单管理 -->
+    <string name="blacklist_title">词黑名单</string>
+    <string name="blacklist_empty">黑名单是空的。\n在扫词结果或词库行点 ✕ 可把 the、a、an 这类词加进来。</string>
+    <string name="blacklist_remove">移出黑名单</string>
+    <string name="blacklist_removed">已恢复「%1$s」</string>
+    <string name="blacklist_desc">黑名单里的词不会出现在扫词候选和词库搜索里。</string>
 
     <!-- 提醒可靠性 -->
     <string name="notification_action_study">去背单词</string>
@@ -124,6 +138,7 @@
     <string name="profile_cloud_secret_hint">Secret Key</string>
     <string name="profile_cloud_save">保存密钥</string>
     <string name="profile_cloud_help">获取方式：cloud.baidu.com 注册并实名认证 → 控制台搜索"文字识别"创建应用 → 复制 API Key 与 Secret Key 填入上方保存。密钥仅存本机，不会上传。个人认证每月有免费调用额度。</string>
+    <string name="profile_word_manage">生词管理</string>
     <string name="profile_about">关于</string>
     <string name="profile_about_body">记英语 —— 简约的考研背单词应用。\n词库来源：qwerty-learner（GPL-3.0）。\n词组释义来源：ECDICT（MIT）。\n真题词频来源：NETEMVocabulary（CC BY-NC-SA 4.0）。\n本地词库未收录时自动联网查询（有道词典公开接口）。</string>
 </resources>

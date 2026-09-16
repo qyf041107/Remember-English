@@ -10,6 +10,7 @@ import com.qyf.rememberenglish.data.db.dao.UserWordWithWord
 import com.qyf.rememberenglish.data.db.entity.DictWordEntity
 import com.qyf.rememberenglish.data.freq.WordFormsProvider
 import com.qyf.rememberenglish.data.freq.WordFreqProvider
+import com.qyf.rememberenglish.data.settings.SettingsRepository
 import com.qyf.rememberenglish.domain.model.UserWord
 import com.qyf.rememberenglish.domain.model.Word
 import com.qyf.rememberenglish.domain.search.FuzzyMatcher
@@ -44,17 +45,21 @@ class WordRepository @Inject constructor(
     private val userWordDao: UserWordDao,
     private val wordFreqProvider: WordFreqProvider,
     private val wordFormsProvider: WordFormsProvider,
+    private val settingsRepository: SettingsRepository,
 ) {
 
     /**
      * 词库搜索（模糊匹配，用户 2026-09-08 要求）：
      * 词库词 + 词组全量打分排序（精确 > 前缀 > 包含 > 编辑距离≤2，同档词频高在前）；
      * 若查询词是某词的变形（went），把原形条目置顶并注明。
+     * 黑名单词（用户 2026-09-16）直接不参与——否则词库行的"加入黑名单"看起来毫无作用。
+     * 误拉黑的词在"我的 → 词黑名单"里可查可恢复。
      */
     suspend fun search(query: String, limit: Int = 30): List<SearchHit> {
         val q = query.trim().lowercase()
         if (q.isEmpty()) return emptyList()
-        val heads = dictWordDao.getAllHeads()
+        val blacklist = settingsRepository.currentBlacklist()
+        val heads = dictWordDao.getAllHeads().filterNot { it.word.lowercase() in blacklist }
         val ranked = FuzzyMatcher.rank(q, heads, { it.word }, { freqOf(it.word) }, limit)
         val entities: Map<Long, DictWordEntity> = if (ranked.isEmpty()) {
             emptyMap()
@@ -64,13 +69,17 @@ class WordRepository @Inject constructor(
         val hits = ranked.mapNotNull { entities[it.id] }.map { SearchHit(it.toWord()) }
         // 搜的是变形词（went/wolves）→ 原形条目置顶展示
         val base = wordFormsProvider.baseOf(q)
-        if (base != null && hits.none { it.word.word == base }) {
+        if (base != null && base !in blacklist && hits.none { it.word.word == base }) {
             dictWordDao.findByWord(base)?.let { found ->
                 return listOf(SearchHit(found.toWord(), note = "“$q”的原形")) + hits
             }
         }
         return hits
     }
+
+    /** 该词是否在黑名单里（词库页在线兜底前判断，避免黑名单词又从联网溜回来） */
+    suspend fun isBlacklisted(word: String): Boolean =
+        word.trim().lowercase() in settingsRepository.currentBlacklist()
 
     fun observeWord(wordId: Long): Flow<Word?> =
         dictWordDao.observeById(wordId).map { it?.toWord() }
@@ -108,6 +117,45 @@ class WordRepository @Inject constructor(
     suspend fun restoreUserWord(userWord: UserWord) {
         userWordDao.insert(userWord.toEntity())
     }
+
+    /**
+     * 打星 / 取消星标（用户 2026-09-16）。星标是词卡属性，只改星标位，不动分数与错记。
+     * 取消星标**不会**移出"我要背"——移出是左滑的职责。
+     */
+    suspend fun setStarred(wordId: Long, starred: Boolean) {
+        userWordDao.setStarred(wordId, starred)
+    }
+
+    /**
+     * 行上点星标：词不在"我要背"时先加入再打星（用户 2026-09-16 选定"一次点击=我要死磕这个词"）。
+     * @return true 表示顺带加入了"我要背"，供 Snackbar 提示与撤销。
+     */
+    suspend fun starWord(wordId: Long): Boolean {
+        val newlyAdded = addToMine(wordId)
+        userWordDao.setStarred(wordId, true)
+        return newlyAdded
+    }
+
+    /** 按单词文本打星（扫词候选用；未收录时先建自定义词再打星） */
+    suspend fun starWordByText(word: String): Boolean {
+        val normalized = word.trim().lowercase()
+        val target = dictWordDao.findByWord(normalized)?.toWord() ?: ensureCustomWord(normalized)
+        return starWord(target.id)
+    }
+
+    /** 按单词文本取消星标（扫词候选用；词未入库时无事可做） */
+    suspend fun unstarWordByText(word: String) {
+        val normalized = word.trim().lowercase()
+        val target = dictWordDao.findByWord(normalized) ?: return
+        userWordDao.setStarred(target.id, false)
+    }
+
+    /** 扫词候选行的星标标注 */
+    suspend fun findStarredWords(words: List<String>): Set<String> =
+        if (words.isEmpty()) emptySet() else userWordDao.findStarredWords(words).toSet()
+
+    /** 词库/在线结果行的星标高亮 */
+    fun observeStarredWordIds(): Flow<List<Long>> = userWordDao.observeStarredWordIds()
 
     /** 插入自定义词（OCR 未命中/手动添加），已存在则直接返回现有词条 */
     suspend fun ensureCustomWord(

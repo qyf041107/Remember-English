@@ -16,9 +16,15 @@ data class UserWord(
     /** 最近一次作答时间；0 = 从未作答 */
     val lastAnsweredAt: Long,
     val isSuspended: Boolean,
+    /** 星标（用户 2026-09-16）：永不算已掌握、不计入今日背会、抽中权重 ×3 */
+    val isStarred: Boolean = false,
 ) {
-    /** 满 [ScoreConstants.MASTER_SCORE] 分即已掌握 */
-    val isMastered: Boolean get() = score >= ScoreConstants.MASTER_SCORE
+    /**
+     * 满 [ScoreConstants.MASTER_SCORE] 分即已掌握。
+     * 星标词**永不算已掌握**（用户 2026-09-16 指定最激进口径）——改这一处，
+     * "我要背"筛选、我的页统计、背诵卡显示会全部跟着正确。
+     */
+    val isMastered: Boolean get() = !isStarred && score >= ScoreConstants.MASTER_SCORE
 
     /** 0 分且从未作答 = 只添加过还没背 */
     val isNew: Boolean get() = score <= 0.0 && lastAnsweredAt == 0L

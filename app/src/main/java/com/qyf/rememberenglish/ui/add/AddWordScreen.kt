@@ -31,6 +31,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -116,15 +118,23 @@ fun AddWordScreen(
             viewModel.consumeCloudFailed()
         }
     }
-    // 忽略伪词（date/sun 等）：Snackbar 可撤销
-    LaunchedEffect(state.ignoredWord) {
-        state.ignoredWord?.let { word ->
+    // 拉黑伪词（the/a/an、date/sun 等）：Snackbar 可撤销
+    LaunchedEffect(state.blacklistedWord) {
+        state.blacklistedWord?.let { word ->
             val action = snackbarHostState.showSnackbar(
-                message = context.getString(R.string.add_ignored, word),
+                message = context.getString(R.string.add_blacklisted, word),
                 actionLabel = context.getString(R.string.mine_undo),
             )
-            viewModel.consumeIgnoredWord()
-            if (action == SnackbarResult.ActionPerformed) viewModel.unignoreWord(word)
+            viewModel.consumeBlacklistedWord()
+            if (action == SnackbarResult.ActionPerformed) viewModel.unblacklistWord(word)
+        }
+    }
+    // 点星标时若该词还没在"我要背"，会自动加入：提示一次
+    // （取消星标不会移出"我要背"，移出请在"我要背"里左滑）
+    LaunchedEffect(state.starNotice) {
+        state.starNotice?.let { word ->
+            snackbarHostState.showSnackbar(context.getString(R.string.add_star_added, word))
+            viewModel.consumeStarNotice()
         }
     }
 
@@ -265,10 +275,12 @@ fun AddWordScreen(
                                 candidate = candidate,
                                 selected = candidate.text in state.selected,
                                 inMine = candidate.text in state.inMine,
+                                starred = candidate.text in state.starred,
                                 onlineMeanings = state.onlineMeanings[candidate.text],
                                 onlineLoading = candidate.text in state.onlineLoading,
                                 onToggle = { viewModel.toggleSelect(candidate.text) },
-                                onIgnore = { viewModel.ignoreWord(candidate.text) },
+                                onBlacklist = { viewModel.blacklistWord(candidate.text) },
+                                onStar = { viewModel.toggleStar(candidate.text) },
                             )
                         }
                     }
@@ -361,16 +373,22 @@ private fun CameraPillButton(
     }
 }
 
-/** 候选词行（紧凑版）：点行勾选；选中高亮 + 对勾；未收录词显示联网释义；右侧标注已添加/自定义/在线/考频 + 忽略 */
+/**
+ * 候选词行（紧凑版）：点行勾选；选中高亮 + 对勾；未收录词显示联网释义。
+ * 行尾：状态标注（已添加/在线/自定义/考频）+ 选中对勾 + 黑名单 + 星标（用户 2026-09-16 行尾三件套）。
+ * 此处无"加入"按钮——加词走勾选 + 底部批量按钮，故星标紧跟状态标注之后。
+ */
 @Composable
 private fun CandidateRow(
     candidate: CandidateWord,
     selected: Boolean,
     inMine: Boolean,
+    starred: Boolean,
     onlineMeanings: List<String>?,
     onlineLoading: Boolean,
     onToggle: () -> Unit,
-    onIgnore: () -> Unit,
+    onBlacklist: () -> Unit,
+    onStar: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -440,16 +458,34 @@ private fun CandidateRow(
                 modifier = Modifier.size(18.dp),
             )
         }
-        Spacer(modifier = Modifier.size(6.dp))
-        // 忽略伪词（date/sun 等）：点 ✕ 从候选移除并持久化，Snackbar 可撤销
+        Spacer(modifier = Modifier.size(4.dp))
+        // 词黑名单（原"忽略"，用户 2026-09-16 升级）：拉黑后不再出现在扫词候选与词库搜索，
+        // 可在"我的 → 词黑名单"恢复。图标沿用 ✕ 以免引入 material-icons-extended。
         Icon(
             imageVector = Icons.Filled.Close,
-            contentDescription = stringResource(R.string.add_ignore),
+            contentDescription = stringResource(R.string.add_blacklist),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
-                .size(20.dp)
-                .clickable(onClick = onIgnore)
-                .padding(2.dp),
+                .size(22.dp)
+                .clickable(onClick = onBlacklist)
+                .padding(3.dp),
+        )
+        Spacer(modifier = Modifier.size(4.dp))
+        // 星标（用户 2026-09-16）：永不算已掌握 + 抽中权重 ×3；未加入"我要背"时点它=自动加入并打星
+        Icon(
+            imageVector = if (starred) Icons.Filled.Star else Icons.Outlined.Star,
+            contentDescription = stringResource(
+                if (starred) R.string.add_unstar else R.string.add_star,
+            ),
+            tint = if (starred) {
+                MaterialTheme.colorScheme.tertiary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier
+                .size(22.dp)
+                .clickable(onClick = onStar)
+                .padding(3.dp),
         )
     }
 }

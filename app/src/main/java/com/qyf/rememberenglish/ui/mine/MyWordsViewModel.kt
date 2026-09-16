@@ -17,9 +17,10 @@ import kotlinx.coroutines.launch
 /**
  * 「我要背」筛选（用户 2026-09-07 定义，按分数而非状态机）：
  * 全部=所有添加的词；新词=只添加过还没背；学习中=已背但未满 5 分；已掌握=满 5 分。
+ * 星标（用户 2026-09-16）：星标词**永不算已掌握**，故独立成档，不落进"已掌握"。
  * 点词进入单词背诵；左滑移出（可撤销）。
  */
-enum class MineFilter { ALL, NEW, LEARNING, MASTERED }
+enum class MineFilter { ALL, NEW, LEARNING, MASTERED, STARRED }
 
 data class MyWordsUiState(
     val items: List<Pair<Word, UserWord>> = emptyList(),
@@ -28,6 +29,7 @@ data class MyWordsUiState(
     val newCount: Int = 0,
     val learningCount: Int = 0,
     val masteredCount: Int = 0,
+    val starredCount: Int = 0,
     /** 最近左滑移出的词（Screen 侧弹 Snackbar 撤销） */
     val removedWord: Word? = null,
 )
@@ -55,14 +57,21 @@ class MyWordsViewModel @Inject constructor(
             filter = f,
             total = items.size,
             newCount = items.count { it.userWord.isNew },
-            learningCount = items.count { !it.userWord.isNew && !it.userWord.isMastered },
+            learningCount = items.count { !it.userWord.isNew && !it.userWord.isMastered && !it.userWord.isStarred },
             masteredCount = items.count { it.userWord.isMastered },
+            starredCount = items.count { it.userWord.isStarred },
             removedWord = removed,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MyWordsUiState())
 
     fun setFilter(value: MineFilter) {
         filter.value = value
+    }
+
+    /** 星标切换（用户 2026-09-16）。取消星标不会移出"我要背"。 */
+    fun toggleStar(wordId: Long) {
+        val current = latestItems.firstOrNull { it.first.id == wordId }?.second ?: return
+        viewModelScope.launch { wordRepository.setStarred(wordId, !current.isStarred) }
     }
 
     /** 左滑移出：记录快照供撤销，随后删除 */
@@ -87,8 +96,9 @@ class MyWordsViewModel @Inject constructor(
     private fun matches(userWord: UserWord, f: MineFilter): Boolean = when (f) {
         MineFilter.ALL -> true
         MineFilter.NEW -> userWord.isNew
-        // 答过但没满 5 分的（含答错 0 分的）都算学习中
-        MineFilter.LEARNING -> !userWord.isNew && !userWord.isMastered
+        // 答过但没满 5 分的（含答错 0 分的）都算学习中；星标词独立成档，不重复计入
+        MineFilter.LEARNING -> !userWord.isNew && !userWord.isMastered && !userWord.isStarred
         MineFilter.MASTERED -> userWord.isMastered
+        MineFilter.STARRED -> userWord.isStarred
     }
 }

@@ -11,6 +11,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -49,6 +51,22 @@ fun WordDetailScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.detail_back))
                     }
                 },
+                // 星标开关（用户 2026-09-16）：放右上角，不动底部"加入/移出"按钮的既有布局
+                actions = {
+                    IconButton(onClick = viewModel::toggleStar) {
+                        Icon(
+                            imageVector = if (state.starred) Icons.Filled.Star else Icons.Outlined.Star,
+                            contentDescription = stringResource(
+                                if (state.starred) R.string.add_unstar else R.string.add_star,
+                            ),
+                            tint = if (state.starred) {
+                                MaterialTheme.colorScheme.tertiary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                },
             )
         },
     ) { padding ->
@@ -64,6 +82,7 @@ fun WordDetailScreen(
         WordDetailContent(
             word = word,
             inMine = state.inMine,
+            starred = state.starred,
             freq = state.freq,
             onToggleMine = viewModel::toggleMine,
             modifier = Modifier
@@ -77,6 +96,7 @@ fun WordDetailScreen(
 private fun WordDetailContent(
     word: Word,
     inMine: Boolean,
+    starred: Boolean,
     freq: Int?,
     onToggleMine: () -> Unit,
     modifier: Modifier = Modifier,
@@ -129,6 +149,15 @@ private fun WordDetailContent(
                 text = stringResource(R.string.detail_custom_tag),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // 星标语义与常规相反，不写出来用户会以为"背会了怎么还在"
+        if (starred) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.detail_starred_hint),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.tertiary,
             )
         }
         Spacer(modifier = Modifier.weight(1f))

@@ -129,6 +129,17 @@ private fun IdleContent(state: StudyUiState, onStart: () -> Unit) {
                     textAlign = TextAlign.Center,
                 )
             } else {
+                // 星标词不计入今日背会（用户 2026-09-16）；未星标词不足目标数时目标无法达成。
+                // 只提示不改行为：星标词仍可练，会话也不会被强行中断。
+                if (progress != null && !progress.reachable) {
+                    Text(
+                        text = stringResource(R.string.study_unreachable_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 16.dp),
+                    )
+                }
                 Button(onClick = onStart, modifier = Modifier.size(width = 200.dp, height = 56.dp)) {
                     Text(stringResource(R.string.study_start), style = MaterialTheme.typography.titleMedium)
                 }

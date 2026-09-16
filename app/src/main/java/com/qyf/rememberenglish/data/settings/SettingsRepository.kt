@@ -14,6 +14,7 @@ import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -53,7 +54,8 @@ class SettingsRepository @Inject constructor(
         val BAIDU_API_KEY = stringPreferencesKey("baidu_api_key")
         val BAIDU_SECRET_KEY = stringPreferencesKey("baidu_secret_key")
 
-        // 扫词页忽略词（用户 2026-09-10：date/sun 等 OCR 伪词每次都出现，忽略后不再打扰）
+        // 词黑名单（用户 2026-09-10 引入为"扫词忽略词"，2026-09-16 升级为黑名单）。
+        // key 字符串保持不变，改名会丢掉用户已有的忽略词。
         val OCR_IGNORED_WORDS = stringSetPreferencesKey("ocr_ignored_words")
     }
 
@@ -80,16 +82,25 @@ class SettingsRepository @Inject constructor(
         }
     }
 
-    /** 扫词页忽略词集合（持久化；忽略的伪词不再出现在候选列表） */
-    val ocrIgnoredWordsFlow: Flow<Set<String>> = context.dataStore.data.map { p ->
+    /**
+     * 词黑名单集合（用户 2026-09-16 由"扫词忽略词"升级而来）：
+     * 黑名单里的词不出现在扫词候选，也不出现在词库搜索结果里。
+     */
+    val blacklistFlow: Flow<Set<String>> = context.dataStore.data.map { p ->
         p[Keys.OCR_IGNORED_WORDS] ?: emptySet()
     }
 
-    suspend fun addOcrIgnoredWord(word: String) {
-        context.dataStore.edit { it[Keys.OCR_IGNORED_WORDS] = (it[Keys.OCR_IGNORED_WORDS] ?: emptySet()) + word }
+    /** 一次性读黑名单（仓库层过滤搜索结果用） */
+    suspend fun currentBlacklist(): Set<String> =
+        context.dataStore.data.first()[Keys.OCR_IGNORED_WORDS] ?: emptySet()
+
+    suspend fun addToBlacklist(word: String) {
+        val normalized = word.trim().lowercase()
+        if (normalized.isEmpty()) return
+        context.dataStore.edit { it[Keys.OCR_IGNORED_WORDS] = (it[Keys.OCR_IGNORED_WORDS] ?: emptySet()) + normalized }
     }
 
-    suspend fun removeOcrIgnoredWord(word: String) {
+    suspend fun removeFromBlacklist(word: String) {
         context.dataStore.edit { it[Keys.OCR_IGNORED_WORDS] = (it[Keys.OCR_IGNORED_WORDS] ?: emptySet()) - word }
     }
 

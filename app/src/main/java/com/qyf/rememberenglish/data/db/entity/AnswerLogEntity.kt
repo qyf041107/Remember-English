@@ -18,4 +18,10 @@ data class AnswerLogEntity(
     val reviewedAt: Long,
     val prevScore: Double,
     val newScore: Double,
+    /**
+     * 作答那一刻该词是否为星标（用户 2026-09-16）。
+     * 存快照而非 JOIN user_word 现查：否则打星会让当天已计入的进度**倒退**，
+     * 左滑移出词卡（删 user_word 行）也会连带扣掉今日计数。
+     */
+    val wasStarred: Boolean = false,
 )

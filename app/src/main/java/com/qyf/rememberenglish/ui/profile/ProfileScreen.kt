@@ -16,7 +16,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -51,10 +54,11 @@ import com.qyf.rememberenglish.R
 import com.qyf.rememberenglish.RememberEnglishApp
 import com.qyf.rememberenglish.data.settings.DarkMode
 
-/** 我的：每日目标 / 每日提醒 / 深色模式 / 统计 / 关于（CLAUDE.md 屏幕清单） */
+/** 我的：每日目标 / 每日提醒 / 深色模式 / 生词管理 / 统计 / 关于（CLAUDE.md 屏幕清单） */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
+    onOpenBlacklist: () -> Unit,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -208,6 +212,40 @@ fun ProfileScreen(
                         onSave = viewModel::setBaiduKeys,
                     )
                 }
+            }
+        }
+
+        SectionTitle(stringResource(R.string.profile_word_manage))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenBlacklist)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.padding(start = 12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.blacklist_title), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = stringResource(R.string.blacklist_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 

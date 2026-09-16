@@ -29,6 +29,7 @@ import com.qyf.rememberenglish.ui.library.WordDetailScreen
 import com.qyf.rememberenglish.ui.mine.MyWordsScreen
 import com.qyf.rememberenglish.ui.navigation.Route
 import com.qyf.rememberenglish.ui.navigation.TOP_LEVEL_DESTINATIONS
+import com.qyf.rememberenglish.ui.profile.BlacklistScreen
 import com.qyf.rememberenglish.ui.profile.ProfileScreen
 import com.qyf.rememberenglish.ui.study.StudyScreen
 import com.qyf.rememberenglish.ui.study.WordStudyScreen
@@ -96,7 +97,12 @@ fun RememberEnglishAppUi(
                     onAddClick = { navController.navigate(Route.ADD_WORD) },
                 )
             }
-            composable(Route.PROFILE) { ProfileScreen() }
+            composable(Route.PROFILE) {
+                ProfileScreen(onOpenBlacklist = { navController.navigate(Route.BLACKLIST) })
+            }
+            composable(Route.BLACKLIST) {
+                BlacklistScreen(onBack = { navController.popBackStack() })
+            }
             composable(
                 Route.WORD_DETAIL,
                 arguments = listOf(navArgument("wordId") { type = NavType.LongType }),

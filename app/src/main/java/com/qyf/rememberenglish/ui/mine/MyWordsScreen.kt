@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -40,6 +42,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qyf.rememberenglish.R
 import com.qyf.rememberenglish.domain.srs.ScoreConstants
+import com.qyf.rememberenglish.ui.components.RowTailAction
 import com.qyf.rememberenglish.ui.components.WordRow
 
 /**
@@ -97,6 +100,7 @@ fun MyWordsScreen(
                                     MineFilter.NEW -> stringResource(R.string.mine_filter_new)
                                     MineFilter.LEARNING -> stringResource(R.string.mine_filter_learning)
                                     MineFilter.MASTERED -> stringResource(R.string.mine_filter_mastered)
+                                    MineFilter.STARRED -> stringResource(R.string.mine_filter_starred)
                                 },
                             )
                         },
@@ -129,7 +133,30 @@ fun MyWordsScreen(
                                 inMine = true,
                                 onClick = { onWordStudyClick(userWord.id) },
                                 onAdd = {},
-                                trailing = { ScoreLabel(userWord.score) },
+                                trailing = {
+                                    // 星标开关（用户 2026-09-16）：复用行尾图标，尺寸与词库行一致
+                                    RowTailAction(
+                                        icon = if (userWord.isStarred) {
+                                            Icons.Filled.Star
+                                        } else {
+                                            Icons.Outlined.Star
+                                        },
+                                        contentDescription = stringResource(
+                                            if (userWord.isStarred) {
+                                                R.string.add_unstar
+                                            } else {
+                                                R.string.add_star
+                                            },
+                                        ),
+                                        tint = if (userWord.isStarred) {
+                                            MaterialTheme.colorScheme.tertiary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        onClick = { viewModel.toggleStar(word.id) },
+                                    )
+                                    ScoreLabel(userWord.score)
+                                },
                             )
                         }
                     }

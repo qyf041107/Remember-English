@@ -51,6 +51,8 @@ class StudyRepository @Inject constructor(
                 reviewedAt = now,
                 prevScore = current.score,
                 newScore = scheduled.score,
+                // 快照作答当时的星标状态（用户 2026-09-16）：星标词不计入今日背会
+                wasStarred = current.isStarred,
             ),
         )
         return scheduled
@@ -61,9 +63,15 @@ class StudyRepository @Inject constructor(
         val dayStart = todayStartMillis()
         return combine(
             answerLogDao.observeMasteredSince(dayStart),
+            userWordDao.observeUnstarredTotal(),
             settingsRepository.settingsFlow,
-        ) { mastered, settings ->
-            DailyProgress(day = todayString(), masteredToday = mastered, target = settings.dailyNewTarget)
+        ) { mastered, unstarred, settings ->
+            DailyProgress(
+                day = todayString(),
+                masteredToday = mastered,
+                target = settings.dailyNewTarget,
+                reachable = unstarred >= settings.dailyNewTarget,
+            )
         }
     }
 
@@ -71,6 +79,12 @@ class StudyRepository @Inject constructor(
     suspend fun getTodayProgress(): DailyProgress {
         val settings = settingsRepository.settingsFlow.first()
         val mastered = answerLogDao.countMasteredSince(todayStartMillis())
-        return DailyProgress(day = todayString(), masteredToday = mastered, target = settings.dailyNewTarget)
+        val unstarred = userWordDao.observeUnstarredTotal().first()
+        return DailyProgress(
+            day = todayString(),
+            masteredToday = mastered,
+            target = settings.dailyNewTarget,
+            reachable = unstarred >= settings.dailyNewTarget,
+        )
     }
 }

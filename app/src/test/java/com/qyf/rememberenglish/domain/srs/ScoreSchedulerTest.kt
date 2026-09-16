@@ -15,6 +15,7 @@ class ScoreSchedulerTest {
         wrong: Int = 0,
         unclear: Int = 0,
         answered: Long = 0L,
+        starred: Boolean = false,
     ) = UserWord(
         id = 1L,
         wordId = 100L,
@@ -24,6 +25,7 @@ class ScoreSchedulerTest {
         unclearCount = unclear,
         lastAnsweredAt = answered,
         isSuspended = false,
+        isStarred = starred,
     )
 
     @Test
@@ -103,8 +105,33 @@ class ScoreSchedulerTest {
 
     @Test
     fun `分数到达5分即掌握_超过也保持掌握`() {
-        assertTrue(ScoreScheduler.isMastered(5.0))
-        assertTrue(ScoreScheduler.isMastered(7.5))
-        assertFalse(ScoreScheduler.isMastered(4.5))
+        assertTrue(ScoreScheduler.hasReachedMasterScore(5.0))
+        assertTrue(ScoreScheduler.hasReachedMasterScore(7.5))
+        assertFalse(ScoreScheduler.hasReachedMasterScore(4.5))
+    }
+
+    // ---- 星标（用户 2026-09-16：永不算已掌握 + 权重 ×3）----
+
+    @Test
+    fun `星标词永不算已掌握`() {
+        assertFalse(word(score = 8.0, starred = true).isMastered)
+        // 同分未星标则算掌握，确认差异只来自星标
+        assertTrue(word(score = 8.0).isMastered)
+    }
+
+    @Test
+    fun `星标权重为3倍且不受已掌握折减`() {
+        // 干净星标词：基础 1.0 × 3
+        assertEquals(3.0, ScoreScheduler.pickWeight(word(starred = true)), 1e-9)
+        // 满 5 分的星标词仍 ×3，而不是被打 0.25 折——星标判定必须先于已掌握判定
+        assertEquals(3.0, ScoreScheduler.pickWeight(word(score = 8.0, starred = true)), 1e-9)
+        // 错过的星标词：(1+2) × 3
+        assertEquals(9.0, ScoreScheduler.pickWeight(word(score = 8.0, wrong = 2, starred = true)), 1e-9)
+    }
+
+    @Test
+    fun `同分时星标词权重远高于已掌握词`() {
+        assertEquals(3.0, ScoreScheduler.pickWeight(word(score = 5.0, starred = true)), 1e-9)
+        assertEquals(0.25, ScoreScheduler.pickWeight(word(score = 5.0)), 1e-9)
     }
 }

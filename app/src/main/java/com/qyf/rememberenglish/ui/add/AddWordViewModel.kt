@@ -66,8 +66,12 @@ data class AddWordUiState(
     val onlineMeanings: Map<String, List<String>> = emptyMap(),
     /** 正在联网查询释义的词 */
     val onlineLoading: Set<String> = emptySet(),
-    /** 刚忽略的词（Screen 弹 Snackbar 可撤销，null=无） */
-    val ignoredWord: String? = null,
+    /** 刚拉黑的词（Screen 弹 Snackbar 可撤销，null=无） */
+    val blacklistedWord: String? = null,
+    /** 候选词中已星标的词（用户 2026-09-16；星标=永不算已掌握+抽中权重×3） */
+    val starred: Set<String> = emptySet(),
+    /** 刚因点星标而顺带加入"我要背"的词（Screen 提示一次，null=无） */
+    val starNotice: String? = null,
     val adding: Boolean = false,
     /** 最近一次加入结果（Screen 侧用资源字符串格式化） */
     val result: AddWordsResult? = null,
@@ -93,15 +97,15 @@ class AddWordViewModel @Inject constructor(
     private val onlineMeaningCache = mutableMapOf<String, List<String>>()
     private val lookupSemaphore = Semaphore(4)
 
-    /** 忽略词（持久化，date/sun 等伪词不再出现；用户 2026-09-10） */
-    private val ignoredWords = MutableStateFlow<Set<String>>(emptySet())
+    /** 词黑名单（持久化；用户 2026-09-10 引入为"忽略词"，2026-09-16 升级为黑名单） */
+    private val blacklist = MutableStateFlow<Set<String>>(emptySet())
 
-    /** 会话内已查过"是否已加入"的词，避免每帧重复打 DB */
+    /** 会话内已查过"是否已加入/已星标"的词，避免每帧重复打 DB */
     private val mineChecked = mutableSetOf<String>()
 
     init {
         viewModelScope.launch {
-            settingsRepository.ocrIgnoredWordsFlow.collect { ignoredWords.value = it }
+            settingsRepository.blacklistFlow.collect { blacklist.value = it }
         }
     }
 
@@ -109,12 +113,12 @@ class AddWordViewModel @Inject constructor(
     fun onOcrText(rawText: String) {
         if (_ui.value.frozen || rawText == lastRawText) return
         lastRawText = rawText
-        if (WordExtractor.extract(rawText).filterNot { it in ignoredWords.value }.isEmpty()) return
+        if (WordExtractor.extract(rawText).filterNot { it in blacklist.value }.isEmpty()) return
         viewModelScope.launch {
             // 考频优先排序（CLAUDE.md 第五节）：有真题词频的按词频降序在前，
             // 词库命中次之，有联网释义的未收录词再次，纯自定义词最后；组内保持画面出现顺序
             val mapped = WordExtractor.extract(rawText)
-                .filterNot { it in ignoredWords.value }
+                .filterNot { it in blacklist.value }
                 .map { token ->
                     CandidateWord(
                         text = token,
@@ -182,10 +186,10 @@ class AddWordViewModel @Inject constructor(
 
     private fun onPhotoText(rawText: String) {
         lastPhotoRaw = rawText
-        if (WordExtractor.extract(rawText).filterNot { it in ignoredWords.value }.isEmpty()) return
+        if (WordExtractor.extract(rawText).filterNot { it in blacklist.value }.isEmpty()) return
         viewModelScope.launch {
             val mapped = WordExtractor.extract(rawText)
-                .filterNot { it in ignoredWords.value }
+                .filterNot { it in blacklist.value }
                 .map { token ->
                     CandidateWord(
                         text = token,
@@ -210,13 +214,16 @@ class AddWordViewModel @Inject constructor(
         }
     }
 
-    /** 已在我要背的词进 state.inMine；会话内每词只查一次 DB */
+    /** 已在我要背 / 已星标 的词进 state；会话内每词只查一次 DB */
     private suspend fun refreshInMine(tokens: List<String>) {
         val unknown = tokens.filter { it !in mineChecked }
         if (unknown.isEmpty()) return
         mineChecked.addAll(unknown)
         val found = wordRepository.findMineWords(unknown)
-        if (found.isNotEmpty()) _ui.update { it.copy(inMine = it.inMine + found) }
+        val starred = wordRepository.findStarredWords(unknown)
+        if (found.isNotEmpty() || starred.isNotEmpty()) {
+            _ui.update { it.copy(inMine = it.inMine + found, starred = it.starred + starred) }
+        }
     }
 
     /** 未收录且未在查询中的词 → 联网查释义（缓存/加载中的跳过），拍照与实时流共用 */
@@ -263,26 +270,56 @@ class AddWordViewModel @Inject constructor(
         }
     }
 
-    /** 忽略伪词（date/sun 等）：持久化 + 移出候选，Snackbar 可撤销 */
-    fun ignoreWord(text: String) {
-        viewModelScope.launch { settingsRepository.addOcrIgnoredWord(text) }
+    /**
+     * 拉黑伪词（the/a/an、date/sun 等）：持久化 + 移出候选，Snackbar 可撤销。
+     * 黑名单同时作用于词库搜索（`WordRepository.search`），误拉黑去"我的 → 词黑名单"恢复。
+     */
+    fun blacklistWord(text: String) {
+        viewModelScope.launch { settingsRepository.addToBlacklist(text) }
         _ui.update { state ->
             state.copy(
                 candidates = state.candidates.filterNot { it.text == text },
                 selected = state.selected - text,
-                ignoredWord = text,
+                blacklistedWord = text,
             )
         }
     }
 
-    /** 撤销忽略：恢复持久化，并在冻结的照片结果里恢复该词 */
-    fun unignoreWord(text: String) {
-        viewModelScope.launch { settingsRepository.removeOcrIgnoredWord(text) }
+    /** 撤销拉黑：恢复持久化，并在冻结的照片结果里恢复该词 */
+    fun unblacklistWord(text: String) {
+        viewModelScope.launch { settingsRepository.removeFromBlacklist(text) }
         if (lastPhotoRaw.isNotBlank()) onPhotoText(lastPhotoRaw)
     }
 
-    fun consumeIgnoredWord() {
-        _ui.update { it.copy(ignoredWord = null) }
+    fun consumeBlacklistedWord() {
+        _ui.update { it.copy(blacklistedWord = null) }
+    }
+
+    /**
+     * 星标切换（用户 2026-09-16）：未在"我要背"的先自动加入再打星（一次点击=我要死磕这个词）。
+     * 取消星标**不会**移出"我要背"——移出请在"我要背"里左滑。
+     */
+    fun toggleStar(text: String) {
+        val starred = text in _ui.value.starred
+        if (starred) {
+            viewModelScope.launch { wordRepository.unstarWordByText(text) }
+            _ui.update { it.copy(starred = it.starred - text) }
+        } else {
+            viewModelScope.launch {
+                val newlyAdded = wordRepository.starWordByText(text)
+                _ui.update { state ->
+                    state.copy(
+                        starred = state.starred + text,
+                        inMine = state.inMine + text,
+                        starNotice = if (newlyAdded) text else null,
+                    )
+                }
+            }
+        }
+    }
+
+    fun consumeStarNotice() {
+        _ui.update { it.copy(starNotice = null) }
     }
 
     fun addSelected() {

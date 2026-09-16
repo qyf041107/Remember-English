@@ -39,6 +39,7 @@ object Mappers {
         unclearCount = unclearCount,
         lastAnsweredAt = lastAnsweredAt,
         isSuspended = isSuspended,
+        isStarred = isStarred,
     )
 
     fun UserWord.toEntity(): UserWordEntity = UserWordEntity(
@@ -50,5 +51,6 @@ object Mappers {
         unclearCount = unclearCount,
         lastAnsweredAt = lastAnsweredAt,
         isSuspended = isSuspended,
+        isStarred = isStarred,
     )
 }

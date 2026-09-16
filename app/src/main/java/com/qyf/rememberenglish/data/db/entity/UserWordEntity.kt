@@ -31,4 +31,9 @@ data class UserWordEntity(
     /** 最近一次作答时间；0 = 从未作答 */
     val lastAnsweredAt: Long = 0L,
     val isSuspended: Boolean = false,
+    /**
+     * 星标（用户 2026-09-16）：永不算已掌握、不计入今日背会、抽中权重 ×3。
+     * 不加 @ColumnInfo(defaultValue)——只让 SQL 侧声明默认值，避免 Room 迁移校验不一致。
+     */
+    val isStarred: Boolean = false,
 )
